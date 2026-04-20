@@ -6,7 +6,7 @@ package headers
 
 import "strings"
 
-type Headers struct{
+type Headers struct {
 	m map[string]string
 }
 
@@ -17,7 +17,7 @@ func New() *Headers {
 }
 
 func (h *Headers) Set(name, value string) {
-	key := strings.ToLower(name) 
+	key := strings.ToLower(name)
 
 	if existing, ok := h.m[key]; ok {
 		h.m[key] = existing + ", " + value
@@ -26,17 +26,14 @@ func (h *Headers) Set(name, value string) {
 	}
 }
 
-
-func (h *Headers) Get(name string) (string, bool){
-	key := h.m[strings.ToLower(name)] 
+func (h *Headers) Get(name string) (string, bool) {
+	key := strings.ToLower(name)
 	value, ok := h.m[key]
 	return value, ok
 }
 
-
-func (h *Headers) ForEach(fn func(name, value string)){
+func (h *Headers) ForEach(fn func(name, value string)) {
 	for name, value := range h.m {
 		fn(name, value)
 	}
 }
-
