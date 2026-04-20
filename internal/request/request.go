@@ -5,6 +5,7 @@
 package request
 
 import (
+	"bytes"
 	"errors"
 	"io"
 )
@@ -71,10 +72,52 @@ func (r *Request) done() bool {
 	return false
 }
 
+
+func parseRequestLine(data []byte) (*RequestLine, int, error) {
+	index := bytes.Index(data, []byte(crlf))
+	if index == -1 {
+		return nil, 0, nil
+	}
+	line := data[:index]
+
+	consumed := index + len(crlf)
+
+	parts := bytes.Split(line, []byte(" "))
+
+	if len(parts) != 3 {
+		return nil, 0, ErrMalformedRequest
+	}
+
+	method := string(parts[0])
+	target := string(parts[1])
+	version := string(parts[2])
+
+	if len(method) == 0 || len(target) == 0 || len(version) == 0 {
+		return nil, 0, ErrMalformedRequest
+	}
+
+	if version != "HTTP/1.1" {
+		return nil, 0, ErrMalformedRequest
+	}
+
+	return &RequestLine{
+		Method:  method,
+		Target:  target,
+		Version: version,
+	}, consumed, nil
+
+	
+}
+
 func (r *Request) parse(data []byte) (consumed int, err error){
+	
+	// _,_,_ := parseRequestLine(data)
+	
 	r.state = stateError
 	return 0, errors.New("State Machine not implemented yet")
 }
+
+
 
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := NewRequest()
