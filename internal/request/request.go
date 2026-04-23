@@ -156,6 +156,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 
 				if length == 0 {
 					r.Body = []byte{}
+					r.state = stateDone
 					continue
 				}
 				r.Body = make([]byte,0, length)
@@ -197,7 +198,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		if err == io.EOF {
 			return nil, errors.New("Unexpected EOF")
 		}
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return nil, err
 		}
 		bufLen += n
@@ -210,8 +211,8 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 
 		if consumed < bufLen {
 			copy(buf, buf[consumed:bufLen]) // shift the unconsumed bytes to the start of the buffer
-			bufLen -= consumed
 		}
+		bufLen -= consumed
 
 	}
 	return req, nil
