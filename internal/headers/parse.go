@@ -6,6 +6,7 @@ import (
 )
 
 var ErrMalformedHeader = errors.New("malformed header")
+const crlf = "\r\n"
 
 func isValidToken(b byte) bool {
 	isValid := false
@@ -53,3 +54,33 @@ func parseHeader(line []byte) (name string, value string, err error) {
 	return name, value, nil
 
 }
+
+func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
+	for {
+		index := bytes.Index(data[consumed:], []byte(crlf))
+
+		if index == -1 {
+			return consumed, false, nil
+		}
+
+		segmentLength := index + len(crlf)
+
+		line := data[consumed: consumed+index]
+		
+		
+		if len(line) == 0 {
+			consumed += segmentLength
+			return consumed, true, nil
+		}
+		name, value, err := parseHeader(line)
+		
+		if err != nil {
+			return consumed, false, err
+		}
+
+		h.Set(name, value)
+		consumed += segmentLength
+
+	}
+}
+
