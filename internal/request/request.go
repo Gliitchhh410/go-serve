@@ -9,6 +9,7 @@ import (
 	"errors"
 	"httpServer/internal/headers"
 	"io"
+	"strconv"
 )
 
 // Request represents a parsed HTTP request.
@@ -41,6 +42,7 @@ type Request struct {
 	Line    *RequestLine
 	Headers *headers.Headers
 	Body    []byte
+	contentLength int
 	// Unexported fields representing the ownership boundary. Only the streaming parser may mutate these.
 	state int // that's why it's s lower case
 }
@@ -144,7 +146,35 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			}
 
 		case stateBody:
-			r.state = stateDone
+			if r.Body == nil {
+				length, err := r.getContentLength()
+				if err != nil {
+					r.state = stateError
+					return consumed, err
+				}
+				r.contentLength = length
+
+				if length == 0 {
+					r.Body = []byte{}
+					continue
+				}
+				r.Body = make([]byte,0, length)
+			}
+
+			remaining := r.contentLength - len(r.Body)
+			available := len(data) - consumed
+			toBeTaken := available
+			if toBeTaken > remaining {
+				toBeTaken = remaining
+			}
+
+			r.Body = append(r.Body, data[consumed:consumed+toBeTaken]...)
+			consumed += toBeTaken
+
+
+			if len(r.Body) == r.contentLength {
+				r.state = stateDone
+			}
 			return consumed, nil
 		default:
 			return consumed, errors.New("Invalid parsing state")
@@ -185,4 +215,21 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 
 	}
 	return req, nil
+}
+
+
+func (r* Request) getContentLength() (int, error) {
+	val, ok := r.Headers.Get("content-length")
+	if !ok {
+		return 0, nil
+	}
+
+	contentLength, err := strconv.Atoi(val)
+	if err != nil || contentLength < 0 {
+		return 0, ErrMalformedRequest
+	}
+
+	return contentLength, nil
+	
+
 }
