@@ -110,8 +110,47 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 	}
 }
 
-
-
 func TestRequestFromReader_Headers(t *testing.T) {
-	
+	tests := []struct {
+		name        string
+		input       string
+		chunkSize   int
+		wantErr     bool
+		wantHeaders map[string]string
+	}{
+		{
+			name:      "Valid Headers",
+			input:     "GET / HTTP/1.1\r\nHost: a\r\nAccept: b\r\n\r\n",
+			chunkSize: 2,
+			wantErr:   false,
+			wantHeaders: map[string]string{
+				"host":   "a",
+				"accept": "b",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &chunkReader{
+				data:      []byte(tt.input),
+				chunkSize: tt.chunkSize,
+			}
+
+			req, err := RequestFromReader(cr)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotNil(t, req)
+			if req != nil {
+				for k, v := range tt.wantHeaders {
+					val, ok := req.Headers.Get(k)
+					assert.True(t, ok)
+					assert.Equal(t, v, val)
+				}
+			}
+		})
+	}
 }

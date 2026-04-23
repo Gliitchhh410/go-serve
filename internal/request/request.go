@@ -114,7 +114,11 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 func (r *Request) parse(data []byte) (consumed int, err error) {
 
-	for consumed < len(data) {
+	for {
+
+		if r.done(){
+			return consumed, nil
+		}
 		switch r.state {
 		case stateInit:
 			line, n, err := parseRequestLine(data[consumed:])
