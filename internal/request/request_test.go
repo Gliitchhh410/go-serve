@@ -154,3 +154,62 @@ func TestRequestFromReader_Headers(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestFromReader_Body(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		chunkSize   int
+		wantErr     bool
+		wantBody string
+	}{
+		{
+			name:      "Valid POST with Body",
+			input:     "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello",
+			chunkSize: 100,
+			wantErr:   false,
+			wantBody: "hello",
+		},
+		{
+			name: "Fragmented Body (chunkSize: 1)",
+			input: "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest",
+			chunkSize: 1,
+			wantErr: false,
+			wantBody: "test",
+		},
+		{
+			name: "Zero Body Default",
+			input: "GET / HTTP/1.1\r\n\r\n",
+			chunkSize: 100,
+			wantErr: false,
+			wantBody: "",
+		},
+		{
+			name: "Invalid Content-Length",
+			input: "POST / HTTP/1.1\r\nContent-Length: abc\r\n\r\n",
+			chunkSize: 100,
+			wantErr: true,
+			wantBody: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &chunkReader{
+				data:      []byte(tt.input),
+				chunkSize: tt.chunkSize,
+			}
+
+			req, err := RequestFromReader(cr)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotNil(t, req)
+			if req != nil {
+				assert.Equal(t, string(req.Body), tt.wantBody)
+			}
+		})
+	}
+}
