@@ -7,6 +7,7 @@ package request
 import (
 	"bytes"
 	"errors"
+	"httpServer/internal/headers"
 	"io"
 )
 
@@ -37,8 +38,9 @@ type RequestLine struct {
 
 type Request struct {
 	// Public fields intended for consumer
-	Line *RequestLine
-	Body []byte
+	Line    *RequestLine
+	Headers *headers.Headers
+	Body    []byte
 	// Unexported fields representing the ownership boundary. Only the streaming parser may mutate these.
 	state int // that's why it's s lower case
 }
@@ -61,7 +63,8 @@ var (
 
 func NewRequest() *Request {
 	return &Request{
-		state: stateInit,
+		Headers: headers.New(),
+		state:   stateInit,
 	}
 }
 
@@ -71,7 +74,6 @@ func (r *Request) done() bool {
 	}
 	return false
 }
-
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	index := bytes.Index(data, []byte(crlf))
@@ -106,18 +108,52 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 		Version: version,
 	}, consumed, nil
 
-	
 }
 
-func (r *Request) parse(data []byte) (consumed int, err error){
-	
-	// _,_,_ := parseRequestLine(data)
-	
-	r.state = stateError
-	return 0, errors.New("State Machine not implemented yet")
+func (r *Request) parse(data []byte) (consumed int, err error) {
+
+	for consumed < len(data) {
+		switch r.state {
+		case stateInit:
+			line, n, err := parseRequestLine(data[consumed:])
+			if err != nil {
+				r.state = stateError
+				return consumed + n, err
+			}
+
+			if line == nil {
+				return consumed, nil
+			}
+			r.Line = line
+			consumed += n
+			r.state = stateHeaders
+
+		case stateHeaders:
+			n, done, err := r.Headers.Parse(data[consumed:])
+
+			if err != nil {
+				r.state = stateError
+				return consumed + n, err
+			}
+
+			consumed += n
+			if done {
+				r.state = stateBody
+			}else {
+				return consumed, nil
+			}
+
+		case stateBody:
+			r.state = stateDone
+			return consumed, nil
+		default:
+			return consumed, errors.New("Invalid parsing state")
+		}
+
+	}
+	return consumed, nil
+
 }
-
-
 
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := NewRequest()
