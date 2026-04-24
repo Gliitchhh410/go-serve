@@ -33,10 +33,21 @@ func main(){
 			conn.Close()
 			continue
 		}
-		fmt.Printf("read: %s", req.Line.Method)
-		fmt.Printf("read: %s", req.Line.Target)
-		fmt.Printf("read: %s", req.Line.Version)
+		
 
+		if req != nil && req.Line != nil {
+			fmt.Printf("Method: %s\n", req.Line.Method)
+			fmt.Printf("Target: %s\n", req.Line.Target)
+			fmt.Printf("Version: %s\n", req.Line.Version)
+			req.Headers.ForEach(func(name, value string) {
+				fmt.Printf("Header: %s: %s\n", name, value)
+			})
+			fmt.Printf("Body: %s\n", string(req.Body))
+		}
+		conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
 		conn.Close()
+
+
+
 	}
 }
