@@ -30,12 +30,12 @@ import (
 //   4. State:
 //      Tracks the current phase of the streaming parser
 //      (e.g., parsing line, headers, or body).
-// 	 
+//
 // 	State transition graph:
 //  Init -> Headers (on CRLF)
 // 	Headers -> Body (on CRLF CRLF)
 // 	Body -> Done (on Content-Length reached)
-// 
+//
 
 type RequestLine struct {
 	Method  string
@@ -45,9 +45,9 @@ type RequestLine struct {
 
 type Request struct {
 	// Public fields intended for consumer
-	Line    *RequestLine
-	Headers *headers.Headers
-	Body    []byte
+	Line          *RequestLine
+	Headers       *headers.Headers
+	Body          []byte
 	contentLength int
 	// Unexported fields representing the ownership boundary. Only the streaming parser may mutate these.
 	state int // that's why it's s lower case
@@ -118,14 +118,12 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 }
 
-
-
 // parse strictly requires CRLF line endings. It returns the exact number of consumed bytes, leaving unparsed data in the buffer. Body parsing strictly depends on the Content-Length header.
 func (r *Request) parse(data []byte) (consumed int, err error) {
 
 	for {
 
-		if r.done(){
+		if r.done() {
 			return consumed, nil
 		}
 		switch r.state {
@@ -154,7 +152,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			consumed += n
 			if done {
 				r.state = stateBody
-			}else {
+			} else {
 				return consumed, nil
 			}
 
@@ -172,7 +170,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 					r.state = stateDone
 					continue
 				}
-				r.Body = make([]byte,0, length)
+				r.Body = make([]byte, 0, length)
 			}
 
 			remaining := r.contentLength - len(r.Body)
@@ -184,7 +182,6 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 
 			r.Body = append(r.Body, data[consumed:consumed+toBeTaken]...)
 			consumed += toBeTaken
-
 
 			if len(r.Body) == r.contentLength {
 				r.state = stateDone
@@ -222,17 +219,21 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 			return nil, err
 		}
 
-		if consumed < bufLen {
-			copy(buf, buf[consumed:bufLen]) // shift the unconsumed bytes to the start of the buffer
+		if consumed > 0 {
+			if consumed == bufLen {
+				bufLen = 0
+			} else {
+				copy(buf, buf[consumed:bufLen])
+				bufLen -= consumed
+			}
+
 		}
-		bufLen -= consumed
 
 	}
 	return req, nil
 }
 
-
-func (r* Request) getContentLength() (int, error) {
+func (r *Request) getContentLength() (int, error) {
 	val, ok := r.Headers.Get("content-length")
 	if !ok {
 		return 0, nil
@@ -244,6 +245,5 @@ func (r* Request) getContentLength() (int, error) {
 	}
 
 	return contentLength, nil
-	
 
 }
