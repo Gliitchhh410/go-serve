@@ -30,6 +30,12 @@ import (
 //   4. State:
 //      Tracks the current phase of the streaming parser
 //      (e.g., parsing line, headers, or body).
+// 	 
+// 	State transition graph:
+//  Init -> Headers (on CRLF)
+// 	Headers -> Body (on CRLF CRLF)
+// 	Body -> Done (on Content-Length reached)
+// 
 
 type RequestLine struct {
 	Method  string
@@ -112,6 +118,9 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 }
 
+
+
+// parse strictly requires CRLF line endings. It returns the exact number of consumed bytes, leaving unparsed data in the buffer. Body parsing strictly depends on the Content-Length header.
 func (r *Request) parse(data []byte) (consumed int, err error) {
 
 	for {

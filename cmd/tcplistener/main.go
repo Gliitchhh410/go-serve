@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"httpServer/internal/request"
 	"log"
 	"net"
@@ -36,13 +35,13 @@ func main(){
 		
 
 		if req != nil && req.Line != nil {
-			fmt.Printf("Method: %s\n", req.Line.Method)
-			fmt.Printf("Target: %s\n", req.Line.Target)
-			fmt.Printf("Version: %s\n", req.Line.Version)
+			log.Printf("Method: %s\n", req.Line.Method)
+			log.Printf("Target: %s\n", req.Line.Target)
+			log.Printf("Version: %s\n", req.Line.Version)
 			req.Headers.ForEach(func(name, value string) {
-				fmt.Printf("Header: %s: %s\n", name, value)
+				log.Printf("Header: %s: %s\n", name, value)
 			})
-			fmt.Printf("Body: %s\n", string(req.Body))
+			log.Printf("Body: %s\n", string(req.Body))
 		}
 		conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
 		conn.Close()

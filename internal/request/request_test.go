@@ -229,3 +229,25 @@ func TestRequest_ErrorStateTrap(t *testing.T){
 
 
 }
+
+
+func TestRequest_StateTransitions(t *testing.T){
+	req := NewRequest()
+	assert.Equal(t, stateInit, req.state)
+
+	consumed, err := req.parse([]byte("GET / HTTP/1.1\r\n"))
+	assert.NoError(t, err)
+	assert.Equal(t, 16, consumed)
+	assert.Equal(t, stateHeaders, req.state)
+
+	consumed, err = req.parse([]byte("Content-Length: 4\r\n\r\n"))
+	assert.NoError(t, err)
+	assert.Equal(t, 21, consumed)
+	assert.Equal(t, stateBody, req.state)
+
+	consumed, err = req.parse([]byte("test"))
+	assert.NoError(t, err)
+	assert.Equal(t, 4, consumed)
+	assert.Equal(t, stateDone, req.state)
+
+}

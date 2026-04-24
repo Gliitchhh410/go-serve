@@ -16,6 +16,7 @@ func New() *Headers {
 	}
 }
 
+// Set adds a Header. Keys are normalized to lowercase. Duplicate headers are concatenated with a comma.
 func (h *Headers) Set(name, value string) {
 	key := strings.ToLower(name)
 
