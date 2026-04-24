@@ -1,6 +1,7 @@
 package request
 
 import (
+	"bytes"
 	"io"
 	"testing"
 
@@ -157,39 +158,39 @@ func TestRequestFromReader_Headers(t *testing.T) {
 
 func TestRequestFromReader_Body(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		chunkSize   int
-		wantErr     bool
-		wantBody string
+		name      string
+		input     string
+		chunkSize int
+		wantErr   bool
+		wantBody  string
 	}{
 		{
 			name:      "Valid POST with Body",
 			input:     "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello",
 			chunkSize: 100,
 			wantErr:   false,
-			wantBody: "hello",
+			wantBody:  "hello",
 		},
 		{
-			name: "Fragmented Body (chunkSize: 1)",
-			input: "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest",
+			name:      "Fragmented Body (chunkSize: 1)",
+			input:     "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest",
 			chunkSize: 1,
-			wantErr: false,
-			wantBody: "test",
+			wantErr:   false,
+			wantBody:  "test",
 		},
 		{
-			name: "Zero Body Default",
-			input: "GET / HTTP/1.1\r\n\r\n",
+			name:      "Zero Body Default",
+			input:     "GET / HTTP/1.1\r\n\r\n",
 			chunkSize: 100,
-			wantErr: false,
-			wantBody: "",
+			wantErr:   false,
+			wantBody:  "",
 		},
 		{
-			name: "Invalid Content-Length",
-			input: "POST / HTTP/1.1\r\nContent-Length: abc\r\n\r\n",
+			name:      "Invalid Content-Length",
+			input:     "POST / HTTP/1.1\r\nContent-Length: abc\r\n\r\n",
 			chunkSize: 100,
-			wantErr: true,
-			wantBody: "",
+			wantErr:   true,
+			wantBody:  "",
 		},
 	}
 	for _, tt := range tests {
@@ -214,24 +215,20 @@ func TestRequestFromReader_Body(t *testing.T) {
 	}
 }
 
-
-func TestRequest_ErrorStateTrap(t *testing.T){
+func TestRequest_ErrorStateTrap(t *testing.T) {
 	req := NewRequest()
 	consumed, err := req.parse([]byte("GET / / HTTP/1.1\r\n\r\n")) // Malformed Extra Token '/'
 	assert.Error(t, err)
 	assert.Equal(t, stateError, req.state)
-
 
 	consumed, err = req.parse([]byte("Valid subsequent data"))
 	assert.NoError(t, err)
 	assert.Equal(t, stateError, req.state)
 	assert.Equal(t, 0, consumed)
 
-
 }
 
-
-func TestRequest_StateTransitions(t *testing.T){
+func TestRequest_StateTransitions(t *testing.T) {
 	req := NewRequest()
 	assert.Equal(t, stateInit, req.state)
 
@@ -250,4 +247,17 @@ func TestRequest_StateTransitions(t *testing.T){
 	assert.Equal(t, 4, consumed)
 	assert.Equal(t, stateDone, req.state)
 
+}
+
+func BenchmarkRequestFromReader(b *testing.B) {
+	raw := []byte("GET / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: bench\r\n\r\n")
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := RequestFromReader(bytes.NewReader(raw))
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
