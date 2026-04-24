@@ -213,3 +213,19 @@ func TestRequestFromReader_Body(t *testing.T) {
 		})
 	}
 }
+
+
+func TestRequest_ErrorStateTrap(t *testing.T){
+	req := NewRequest()
+	consumed, err := req.parse([]byte("GET / / HTTP/1.1\r\n\r\n")) // Malformed Extra Token '/'
+	assert.Error(t, err)
+	assert.Equal(t, stateError, req.state)
+
+
+	consumed, err = req.parse([]byte("Valid subsequent data"))
+	assert.NoError(t, err)
+	assert.Equal(t, stateError, req.state)
+	assert.Equal(t, 0, consumed)
+
+
+}
