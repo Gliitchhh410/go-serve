@@ -5,12 +5,12 @@
 package request
 
 import (
-	"sync"
 	"bytes"
 	"errors"
 	"httpServer/internal/headers"
 	"io"
 	"strconv"
+	"sync"
 )
 
 // Request represents a parsed HTTP request.
@@ -50,8 +50,7 @@ type Request struct {
 	Headers       *headers.Headers
 	Body          []byte
 	contentLength int
-	// Unexported fields representing the ownership boundary. Only the streaming parser may mutate these.
-	state int // that's why it's s lower case
+	state int 
 }
 
 const (
@@ -64,14 +63,12 @@ const (
 
 var ( // Carriage Return + Line Feed
 	crlfBytes = []byte("\r\n")
-	colonByte = byte(':')
 )
 
 var (
 	ErrMalformedRequest = errors.New("malformed HTTP request")
 	ErrInvalidState     = errors.New("invalid parsing state")
 	ErrUnexpectedEOF    = errors.New("unexpected EOF")
-
 )
 
 var requestPool = sync.Pool{
@@ -79,8 +76,6 @@ var requestPool = sync.Pool{
 		return NewRequest()
 	},
 }
- 
-
 
 func NewRequest() *Request {
 	return &Request{
@@ -105,7 +100,6 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 	consumed := index + len(crlfBytes)
 
-
 	s1 := bytes.IndexByte(line, ' ')
 	if s1 == -1 {
 		return nil, 0, ErrMalformedRequest
@@ -117,13 +111,9 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	}
 
 	s2 += s1 + 1
-	
-	
-
-
 
 	method := string(line[:s1])
-	target := string(line[s1+1:s2])
+	target := string(line[s1+1 : s2])
 	version := string(line[s2+1:])
 	if len(method) == 0 || len(target) == 0 || len(version) == 0 {
 		return nil, 0, ErrMalformedRequest
@@ -151,28 +141,28 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		}
 		switch r.state {
 		case stateInit:
-			line, n, err := parseRequestLine(data[consumed:])
-			if err != nil{
+			line, bytesParsed, err := parseRequestLine(data[consumed:])
+			if err != nil {
 				r.transitionTo(stateError)
-				return consumed + n, err
+				return consumed + bytesParsed, err
 			}
 
 			if line == nil {
 				return consumed, nil
 			}
 			r.Line = line
-			consumed += n
+			consumed += bytesParsed
 			r.transitionTo(stateHeaders)
 
 		case stateHeaders:
-			n, done, err := r.Headers.Parse(data[consumed:])
+			bytesParsed, done, err := r.Headers.Parse(data[consumed:])
 
 			if err != nil {
 				r.transitionTo(stateError)
-				return consumed + n, err
+				return consumed + bytesParsed, err
 			}
 
-			consumed += n
+			consumed += bytesParsed
 			if done {
 				r.transitionTo(stateBody)
 			} else {
@@ -215,7 +205,6 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		}
 
 	}
-	return consumed, nil
 
 }
 
@@ -229,9 +218,13 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		bytesRead, err := r.Read(readBuf[bufferedBytes:])
 
 		if err == io.EOF {
+			ReleaseRequest(req)
+
 			return nil, ErrUnexpectedEOF
 		}
 		if err != nil && err != io.EOF {
+			ReleaseRequest(req)
+
 			return nil, err
 		}
 		bufferedBytes += bytesRead
@@ -239,6 +232,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		consumed, err := req.parse(readBuf[:bufferedBytes])
 
 		if err != nil {
+			ReleaseRequest(req)
 			return nil, err
 		}
 
@@ -271,24 +265,21 @@ func (r *Request) getContentLength() (int, error) {
 
 }
 
-func (r *Request) transitionTo(nextState int){
+func (r *Request) transitionTo(nextState int) {
 	r.state = nextState
 }
-
 
 func AcquireRequest() *Request {
 	return requestPool.Get().(*Request)
 }
 
-
-func (r *Request) Reset(){
+func (r *Request) Reset() {
 	r.Line = nil
 	r.Headers.Reset()
 	r.Body = r.Body[:0]
 	r.contentLength = 0
 	r.transitionTo(stateInit)
 }
-
 
 func ReleaseRequest(r *Request) {
 	if r == nil {

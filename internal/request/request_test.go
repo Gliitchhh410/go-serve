@@ -360,3 +360,60 @@ func TestRequestFromReader_LargeHeaderCount(t *testing.T) {
 		assert.Equal(t, expected, val)
 	}
 }
+
+func TestRequestFromReader_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantErr     bool
+		expectedErr error
+	}{
+		{
+			name:        "Empty Request",
+			input:       "",
+			wantErr:     true,
+			expectedErr: ErrUnexpectedEOF,
+		},
+		{
+			name:        "Input with onlt crlf",
+			input:       "\r\n",
+			wantErr:     true,
+			expectedErr: ErrMalformedRequest,
+		},
+		{
+			name:        "Immediate EOF after partial request",
+			input:       "GET / HTT",
+			wantErr:     true,
+			expectedErr: ErrUnexpectedEOF,
+		},
+		{
+			name:    "Header Line with empty value",
+			input:   "GET / HTTP/1.1\r\nEmpty-Header:\r\n\r\n",
+			wantErr: false,
+		},
+		{
+			name:    "Header with extra colon",
+			input:   "GET / HTTP/1.1\r\nHost: localhost:42069\r\n\r\n",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &chunkReader{
+				data:      []byte(tt.input),
+				chunkSize: 100,
+			}
+			_, err := RequestFromReader(cr)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.expectedErr != nil {
+					assert.Equal(t, tt.expectedErr, err)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+
+}
