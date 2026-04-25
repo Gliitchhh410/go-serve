@@ -5,6 +5,7 @@
 package request
 
 import (
+	"sync"
 	"bytes"
 	"errors"
 	"httpServer/internal/headers"
@@ -69,6 +70,13 @@ var ( // Carriage Return + Line Feed
 var (
 	ErrMalformedRequest = errors.New("malformed HTTP request")
 )
+
+var requestPool = sync.Pool{
+	New: func() any {
+		return NewRequest()
+	},
+}
+
 
 func NewRequest() *Request {
 	return &Request{
@@ -211,7 +219,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 }
 
 func RequestFromReader(r io.Reader) (*Request, error) {
-	req := NewRequest()
+	req := AcquireRequest()
 
 	buf := make([]byte, 4096)
 	bufLen := 0
@@ -260,4 +268,24 @@ func (r *Request) getContentLength() (int, error) {
 
 	return contentLength, nil
 
+}
+
+
+func AcquireRequest() *Request {
+	return requestPool.Get().(*Request)
+}
+
+
+func (r *Request) Reset(){
+	r.Line = nil
+	r.Headers.Reset()
+	r.Body = nil
+	r.contentLength = 0
+	r.state = stateInit
+}
+
+
+func ReleaseRequest(r *Request) {
+	r.Reset()
+	requestPool.Put(r)
 }

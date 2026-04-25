@@ -46,3 +46,9 @@ func (h *Headers) ForEach(fn func(name, value string)) {
 		fn(name, strings.Join(values, ", "))
 	}
 }
+
+
+
+func (h *Headers) Reset(){
+	clear(h.m)
+}

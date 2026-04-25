@@ -5,7 +5,8 @@ import (
 	"log"
 	"net"
 )
-func main(){
+
+func main() {
 	listener, err := net.Listen("tcp", ":42069")
 
 	if err != nil {
@@ -18,21 +19,21 @@ func main(){
 
 	for {
 		conn, err := listener.Accept()
-		
+
 		if err != nil {
 			log.Printf("Error accepting connection: %v\n", err)
 			continue
 		}
-		
+
 		log.Printf("Accepted connection from %s\n", conn.RemoteAddr().String())
 
-		req ,err := request.RequestFromReader(conn)
+		req, err := request.RequestFromReader(conn)
 		if err != nil {
 			log.Printf("Error parsing request: %v\n", err)
+			request.ReleaseRequest(req)
 			conn.Close()
 			continue
 		}
-		
 
 		if req != nil && req.Line != nil {
 			log.Printf("Method: %s\n", req.Line.Method)
@@ -44,9 +45,9 @@ func main(){
 			log.Printf("Body: %s\n", string(req.Body))
 		}
 		conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
+		request.ReleaseRequest(req)
 		conn.Close()
-
-
+		
 
 	}
 }
