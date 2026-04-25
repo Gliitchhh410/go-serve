@@ -2,6 +2,7 @@ package request
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 
@@ -259,5 +260,103 @@ func BenchmarkRequestFromReader(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func BenchmarkRequestFromReader_BodyScaling(b *testing.B) {
+	sizes := []struct {
+		name string
+		size int
+	}{
+		{"1KB", 1 << 10},
+		{"16KB", 16 << 10},
+		{"256KB", 256 << 10},
+	}
+
+	for _, s := range sizes {
+		b.Run(s.name, func(b *testing.B) {
+			body := bytes.Repeat([]byte("a"), s.size)
+			raw := append(
+				[]byte("POST / HTTP/1.1\r\nContent-Length: "),
+				[]byte(fmt.Sprintf("%d\r\n\r\n", len(body)))...,
+			)
+			raw = append(raw, body...)
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				_, err := RequestFromReader(bytes.NewReader(raw))
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkRequestFromReader_ManyHeaders(b *testing.B) {
+	sizes := []struct {
+		name  string
+		count int
+	}{
+		{"10", 10},
+		{"100", 100},
+		{"1000", 1000},
+	}
+
+	for _, s := range sizes {
+		b.Run(s.name, func(b *testing.B) {
+			var buf bytes.Buffer
+
+			// request line
+			buf.WriteString("GET / HTTP/1.1\r\n")
+
+			// generate headers
+			for i := 0; i < s.count; i++ {
+				fmt.Fprintf(&buf, "X-Test-%d: value-%d\r\n", i, i)
+			}
+
+			// end headers
+			buf.WriteString("\r\n")
+
+			raw := buf.Bytes()
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				_, err := RequestFromReader(bytes.NewReader(raw))
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func TestRequestFromReader_LargeHeaderCount(t *testing.T) {
+	const headerCount = 500
+
+	var buf bytes.Buffer
+	buf.WriteString("GET / HTTP/1.1\r\n")
+
+	for i := 0; i < headerCount; i++ {
+		fmt.Fprintf(&buf, "X-Test-%d: value-%d\r\n", i, i)
+	}
+
+	buf.WriteString("\r\n")
+
+	req, err := RequestFromReader(bytes.NewReader(buf.Bytes()))
+	assert.NoError(t, err)
+	assert.NotNil(t, req)
+
+	// spot-check a few headers (start, middle, end)
+	tests := []int{0, headerCount / 2, headerCount - 1}
+
+	for _, i := range tests {
+		key := fmt.Sprintf("x-test-%d", i) // assuming lowercase normalization
+		expected := fmt.Sprintf("value-%d", i)
+
+		val, ok := req.Headers.Get(key)
+		assert.True(t, ok, "missing header %s", key)
+		assert.Equal(t, expected, val)
 	}
 }

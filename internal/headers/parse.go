@@ -3,10 +3,14 @@ package headers
 import (
 	"bytes"
 	"errors"
+	"strings"
 )
 
 var ErrMalformedHeader = errors.New("malformed header")
-const crlf = "\r\n"
+var (
+	crlfBytes = []byte("\r\n")
+	colonByte = byte(':') 
+)
 
 func isValidToken(b byte) bool {
 	isValid := false
@@ -31,13 +35,15 @@ func isValidToken(b byte) bool {
 }
 
 func parseHeader(line []byte) (name string, value string, err error) {
-	parts := bytes.SplitN(line, []byte(":"), 2)
-
-	if len(parts) < 2 {
+	// parts := bytes.SplitN(line, []byte(":"), 2)
+	s1 := bytes.IndexByte(line, colonByte)
+	if s1 == -1 {
 		return "", "", ErrMalformedHeader
 	}
+	name = string(line[:s1])
+	value = string(bytes.TrimSpace(line[s1+1:]))
 
-	name = string(parts[0])
+
 
 	if len(name) < 1 || name[len(name)-1] == ' ' {
 		return "", "", ErrMalformedHeader
@@ -48,22 +54,19 @@ func parseHeader(line []byte) (name string, value string, err error) {
 			return "", "", ErrMalformedHeader
 		}
 	}
-
-	value = string(bytes.TrimSpace(parts[1]))
-
 	return name, value, nil
 
 }
 
 func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 	for {
-		index := bytes.Index(data[consumed:], []byte(crlf))
+		index := bytes.Index(data[consumed:], crlfBytes)
 
 		if index == -1 {
 			return consumed, false, nil
 		}
 
-		segmentLength := index + len(crlf)
+		segmentLength := index + len(crlfBytes)
 
 		line := data[consumed: consumed+index]
 		
@@ -77,8 +80,8 @@ func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 		if err != nil {
 			return consumed, false, err
 		}
-
-		h.Set(name, value)
+		key := strings.ToLower(name)
+		h.Set(key, value)
 		consumed += segmentLength
 
 	}
