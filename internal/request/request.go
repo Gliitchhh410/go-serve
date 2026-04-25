@@ -69,6 +69,9 @@ var ( // Carriage Return + Line Feed
 
 var (
 	ErrMalformedRequest = errors.New("malformed HTTP request")
+	ErrInvalidState     = errors.New("invalid parsing state")
+	ErrUnexpectedEOF    = errors.New("unexpected EOF")
+
 )
 
 var requestPool = sync.Pool{
@@ -76,6 +79,7 @@ var requestPool = sync.Pool{
 		return NewRequest()
 	},
 }
+ 
 
 
 func NewRequest() *Request {
@@ -101,7 +105,6 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 	consumed := index + len(crlfBytes)
 
-	// parts := bytes.Split(line, []byte(" "))
 
 	s1 := bytes.IndexByte(line, ' ')
 	if s1 == -1 {
@@ -117,9 +120,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	
 	
 
-	// if len(parts) != 3 {
-	// 	return nil, 0, ErrMalformedRequest
-	// }
+
 
 	method := string(line[:s1])
 	target := string(line[s1+1:s2])
@@ -152,7 +153,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		case stateInit:
 			line, n, err := parseRequestLine(data[consumed:])
 			if err != nil{
-				r.state = stateError
+				r.transitionTo(stateError)
 				return consumed + n, err
 			}
 
@@ -161,19 +162,19 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			}
 			r.Line = line
 			consumed += n
-			r.state = stateHeaders
+			r.transitionTo(stateHeaders)
 
 		case stateHeaders:
 			n, done, err := r.Headers.Parse(data[consumed:])
 
 			if err != nil {
-				r.state = stateError
+				r.transitionTo(stateError)
 				return consumed + n, err
 			}
 
 			consumed += n
 			if done {
-				r.state = stateBody
+				r.transitionTo(stateBody)
 			} else {
 				return consumed, nil
 			}
@@ -182,14 +183,14 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			if r.Body == nil {
 				length, err := r.getContentLength()
 				if err != nil {
-					r.state = stateError
+					r.transitionTo(stateError)
 					return consumed, err
 				}
 				r.contentLength = length
 
 				if length == 0 {
 					r.Body = []byte{}
-					r.state = stateDone
+					r.transitionTo(stateDone)
 					continue
 				}
 				r.Body = make([]byte, 0, length)
@@ -206,11 +207,11 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			consumed += toBeTaken
 
 			if len(r.Body) == r.contentLength {
-				r.state = stateDone
+				r.transitionTo(stateDone)
 			}
 			return consumed, nil
 		default:
-			return consumed, errors.New("Invalid parsing state")
+			return consumed, ErrInvalidState
 		}
 
 	}
@@ -221,32 +222,32 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := AcquireRequest()
 
-	buf := make([]byte, 4096)
-	bufLen := 0
+	readBuf := make([]byte, 4096)
+	bufferedBytes := 0
 
 	for !req.done() {
-		n, err := r.Read(buf[bufLen:])
+		bytesRead, err := r.Read(readBuf[bufferedBytes:])
 
 		if err == io.EOF {
-			return nil, errors.New("Unexpected EOF")
+			return nil, ErrUnexpectedEOF
 		}
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
-		bufLen += n
+		bufferedBytes += bytesRead
 
-		consumed, err := req.parse(buf[:bufLen])
+		consumed, err := req.parse(readBuf[:bufferedBytes])
 
 		if err != nil {
 			return nil, err
 		}
 
 		if consumed > 0 {
-			if consumed == bufLen {
-				bufLen = 0
+			if consumed == bufferedBytes {
+				bufferedBytes = 0
 			} else {
-				copy(buf, buf[consumed:bufLen])
-				bufLen -= consumed
+				copy(readBuf, readBuf[consumed:bufferedBytes])
+				bufferedBytes -= consumed
 			}
 
 		}
@@ -270,6 +271,10 @@ func (r *Request) getContentLength() (int, error) {
 
 }
 
+func (r *Request) transitionTo(nextState int){
+	r.state = nextState
+}
+
 
 func AcquireRequest() *Request {
 	return requestPool.Get().(*Request)
@@ -279,13 +284,16 @@ func AcquireRequest() *Request {
 func (r *Request) Reset(){
 	r.Line = nil
 	r.Headers.Reset()
-	r.Body = nil
+	r.Body = r.Body[:0]
 	r.contentLength = 0
-	r.state = stateInit
+	r.transitionTo(stateInit)
 }
 
 
 func ReleaseRequest(r *Request) {
+	if r == nil {
+		return
+	}
 	r.Reset()
 	requestPool.Put(r)
 }

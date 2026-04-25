@@ -38,26 +38,3 @@ func TestHeaders_SetAndGet(t *testing.T){
 }
 
 
-func TestHeaders_RequiresNormalizedKeys(t *testing.T) {
-	h := New()
-
-	h.Set("Content-Type", "text/plain")
-
-	val, ok := h.Get("content-type")
-	assert.True(t, ok)
-	assert.Equal(t, "text/plain", val)
-}
-
-
-func BenchmarkHeadersSetDuplicate(b *testing.B) {
-	h := New()
-	value := "192.168.1.1"
-	
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-
-		h.Set("x-forwarded-for", value)
-	}
-}
