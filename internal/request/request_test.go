@@ -440,7 +440,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &chunkReader{
 				data:      []byte(tt.input),
-				chunkSize: 100,
+				chunkSize: tt.chunkSize,
 			}
 			_, err := RequestFromReader(cr)
 			if tt.wantErr {
