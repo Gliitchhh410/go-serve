@@ -365,36 +365,74 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
+		chunkSize   int
 		wantErr     bool
 		expectedErr error
 	}{
 		{
 			name:        "Empty Request",
 			input:       "",
+			chunkSize:   100,
 			wantErr:     true,
 			expectedErr: ErrUnexpectedEOF,
 		},
 		{
 			name:        "Input with onlt crlf",
 			input:       "\r\n",
+			chunkSize:   100,
 			wantErr:     true,
 			expectedErr: ErrMalformedRequest,
 		},
 		{
 			name:        "Immediate EOF after partial request",
 			input:       "GET / HTT",
+			chunkSize:   100,
 			wantErr:     true,
 			expectedErr: ErrUnexpectedEOF,
 		},
 		{
-			name:    "Header Line with empty value",
-			input:   "GET / HTTP/1.1\r\nEmpty-Header:\r\n\r\n",
-			wantErr: false,
+			name:      "Header Line with empty value",
+			input:     "GET / HTTP/1.1\r\nEmpty-Header:\r\n\r\n",
+			chunkSize: 100,
+			wantErr:   false,
 		},
 		{
-			name:    "Header with extra colon",
-			input:   "GET / HTTP/1.1\r\nHost: localhost:42069\r\n\r\n",
-			wantErr: false,
+			name:      "Header with extra colon",
+			input:     "GET / HTTP/1.1\r\nHost: localhost:42069\r\n\r\n",
+			chunkSize: 100,
+			wantErr:   false,
+		},
+		{
+			name:      "Query String in Target",
+			input:     "GET /search?q=test HTTP/1.1\r\n\r\n",
+			chunkSize: 100,
+			wantErr:   false,
+		},
+		{
+			name:      "Unusual Method Token",
+			input:     "CUSTOM-METHOD / HTTP/1.1\r\n\r\n",
+			chunkSize: 100,
+			wantErr:   false,
+		},
+		{
+			name:      "Extreme Framentation",
+			input:     "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\nbody",
+			chunkSize: 1,
+			wantErr:   false,
+		},
+		{
+			name:        "Immediate EOF after partial headers",
+			input:       "GET / HTTP/1.1\r\nHost: a\r\n",
+			chunkSize:   100,
+			wantErr:     true,
+			expectedErr: ErrUnexpectedEOF,
+		},
+		{
+			name:        "Immediate EOF mid-body",
+			input:       "POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nhalf",
+			chunkSize:   100,
+			wantErr:     true,
+			expectedErr: ErrUnexpectedEOF,
 		},
 	}
 
@@ -408,7 +446,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
-					assert.Equal(t, tt.expectedErr, err)
+					assert.ErrorIs(t, err, tt.expectedErr)
 				}
 			} else {
 				assert.NoError(t, err)
