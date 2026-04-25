@@ -50,7 +50,7 @@ type Request struct {
 	Headers       *headers.Headers
 	Body          []byte
 	contentLength int
-	state int 
+	state         int
 }
 
 const (
@@ -139,7 +139,9 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		if r.done() {
 			return consumed, nil
 		}
+
 		switch r.state {
+
 		case stateInit:
 			line, bytesParsed, err := parseRequestLine(data[consumed:])
 			if err != nil {
@@ -150,44 +152,56 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			if line == nil {
 				return consumed, nil
 			}
+
 			r.Line = line
 			consumed += bytesParsed
 			r.transitionTo(stateHeaders)
 
 		case stateHeaders:
 			bytesParsed, done, err := r.Headers.Parse(data[consumed:])
-
 			if err != nil {
 				r.transitionTo(stateError)
 				return consumed + bytesParsed, err
 			}
 
 			consumed += bytesParsed
-			if done {
-				r.transitionTo(stateBody)
-			} else {
-				return consumed, nil
-			}
 
-		case stateBody:
-			if r.Body == nil {
+			if done {
+				// --- FIX START ---
+
 				length, err := r.getContentLength()
 				if err != nil {
 					r.transitionTo(stateError)
 					return consumed, err
 				}
+
 				r.contentLength = length
 
 				if length == 0 {
-					r.Body = []byte{}
 					r.transitionTo(stateDone)
 					continue
 				}
-				r.Body = make([]byte, 0, length)
+
+				// Ensure capacity (reuse pooled slice if possible)
+				if cap(r.Body) < length {
+					r.Body = make([]byte, 0, length)
+				} else {
+					r.Body = r.Body[:0]
+				}
+
+				r.transitionTo(stateBody)
+
+				// --- FIX END ---
+			} else {
+				return consumed, nil
 			}
+
+		case stateBody:
+			// --- FIX: removed `if r.Body == nil` block entirely ---
 
 			remaining := r.contentLength - len(r.Body)
 			available := len(data) - consumed
+
 			toBeTaken := available
 			if toBeTaken > remaining {
 				toBeTaken = remaining
@@ -199,15 +213,14 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			if len(r.Body) == r.contentLength {
 				r.transitionTo(stateDone)
 			}
+
 			return consumed, nil
+
 		default:
 			return consumed, ErrInvalidState
 		}
-
 	}
-
 }
-
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := AcquireRequest()
 
