@@ -412,7 +412,8 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 			name:      "Unusual Method Token",
 			input:     "CUSTOM-METHOD / HTTP/1.1\r\n\r\n",
 			chunkSize: 100,
-			wantErr:   false,
+			wantErr:   true,
+			expectedErr: ErrMethodNotAllowed,
 		},
 		{
 			name:      "Extreme Framentation",

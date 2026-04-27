@@ -69,7 +69,17 @@ var (
 	ErrMalformedRequest = errors.New("malformed HTTP request")
 	ErrInvalidState     = errors.New("invalid parsing state")
 	ErrUnexpectedEOF    = errors.New("unexpected EOF")
+	ErrMethodNotAllowed = errors.New("method not allowed")
 )
+
+var allowedMethods = map[string]bool{
+	"GET":     true,
+	"POST":    true,
+	"PUT":     true,
+	"DELETE":  true,
+	"HEAD":    true,
+	"OPTIONS": true,
+}
 
 var requestPool = sync.Pool{
 	New: func() any {
@@ -148,9 +158,12 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 				r.transitionTo(stateError)
 				return consumed + bytesParsed, err
 			}
-
 			if line == nil {
 				return consumed, nil
+			}
+			if err := validateMethod(line.Method); err != nil {
+				r.transitionTo(stateError)
+				return consumed + bytesParsed, err
 			}
 
 			r.Line = line
@@ -300,4 +313,11 @@ func ReleaseRequest(r *Request) {
 	}
 	r.Reset()
 	requestPool.Put(r)
+}
+func validateMethod(method string) error {
+	_, ok := allowedMethods[method]
+	if !ok {
+		return ErrMethodNotAllowed
+	}
+	return nil
 }

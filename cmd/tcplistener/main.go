@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"httpServer/internal/request"
 	"httpServer/internal/response"
 	"log"
@@ -30,6 +31,14 @@ func main() {
 		log.Printf("Accepted connection from %s\n", conn.RemoteAddr().String())
 
 		req, err := request.RequestFromReader(conn)
+		if errors.Is(err, request.ErrMethodNotAllowed) {
+			rw.SetStatus(405)
+			rw.SetHeader("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS")
+			rw.Send()
+			request.ReleaseRequest(req)
+			conn.Close()
+			continue
+		}
 		if err != nil {
 			rw.SetStatus(400)
 			rw.Send()
@@ -52,7 +61,6 @@ func main() {
 		rw.Send()
 		request.ReleaseRequest(req)
 		conn.Close()
-		
 
 	}
 }
