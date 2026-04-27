@@ -2,6 +2,7 @@ package main
 
 import (
 	"httpServer/internal/request"
+	"httpServer/internal/response"
 	"log"
 	"net"
 )
@@ -24,12 +25,14 @@ func main() {
 			log.Printf("Error accepting connection: %v\n", err)
 			continue
 		}
+		rw := response.NewResponseWriter(conn)
 
 		log.Printf("Accepted connection from %s\n", conn.RemoteAddr().String())
 
 		req, err := request.RequestFromReader(conn)
 		if err != nil {
-			log.Printf("Error parsing request: %v\n", err)
+			rw.SetStatus(400)
+			rw.Send()
 			request.ReleaseRequest(req)
 			conn.Close()
 			continue
@@ -44,7 +47,9 @@ func main() {
 			})
 			log.Printf("Body: %s\n", string(req.Body))
 		}
-		conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
+		rw.SetStatus(200)
+		rw.SetBody([]byte("OK"))
+		rw.Send()
 		request.ReleaseRequest(req)
 		conn.Close()
 		
