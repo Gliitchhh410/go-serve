@@ -10,6 +10,7 @@ import (
 	"httpServer/internal/headers"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -38,9 +39,13 @@ import (
 // 	Body -> Done (on Content-Length reached)
 //
 
+type RequestTarget struct {
+	Path     string
+	RawQuery string
+}
 type RequestLine struct {
 	Method  string
-	Target  string
+	Target  RequestTarget
 	Version string
 }
 
@@ -70,6 +75,7 @@ var (
 	ErrInvalidState     = errors.New("invalid parsing state")
 	ErrUnexpectedEOF    = errors.New("unexpected EOF")
 	ErrMethodNotAllowed = errors.New("method not allowed")
+	ErrInvalidTarget    = errors.New("invalid request target")
 )
 
 var allowedMethods = map[string]bool{
@@ -101,6 +107,23 @@ func (r *Request) done() bool {
 	return false
 }
 
+func parseRequestTarget(raw string) (RequestTarget, error) {
+	if len(raw) == 0 || raw[0] != '/' {
+		return RequestTarget{}, ErrInvalidTarget
+	}
+
+	index := strings.IndexByte(raw, '?')
+
+	if index == -1 {
+		return RequestTarget{Path: raw, RawQuery: ""}, nil
+	}
+
+	return RequestTarget{
+		Path:     raw[:index],
+		RawQuery: raw[index+1:],
+	}, nil
+}
+
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	index := bytes.Index(data, crlfBytes)
 	if index == -1 {
@@ -123,19 +146,24 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	s2 += s1 + 1
 
 	method := string(line[:s1])
-	target := string(line[s1+1 : s2])
+	targetRaw := string(line[s1+1 : s2])
 	version := string(line[s2+1:])
-	if len(method) == 0 || len(target) == 0 || len(version) == 0 {
+	if len(method) == 0 || len(targetRaw) == 0 || len(version) == 0 {
 		return nil, 0, ErrMalformedRequest
 	}
-
 	if version != "HTTP/1.1" {
 		return nil, 0, ErrMalformedRequest
 	}
 
+	parsedTarget, err := parseRequestTarget(targetRaw)
+	if err != nil {
+		return nil, 0, err
+	}
+
+
 	return &RequestLine{
 		Method:  method,
-		Target:  target,
+		Target:  parsedTarget,
 		Version: version,
 	}, consumed, nil
 

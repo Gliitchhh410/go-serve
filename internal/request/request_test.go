@@ -33,7 +33,8 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 		chunkSize   int
 		wantErr     bool
 		wantMethod  string
-		wantTarget  string
+		wantPath    string
+		wantRawQuery string
 		wantVersion string
 	}{
 		{
@@ -42,7 +43,8 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			chunkSize:   100,
 			wantErr:     false,
 			wantMethod:  "GET",
-			wantTarget:  "/",
+			wantPath:    "/",
+			wantRawQuery: "",
 			wantVersion: "HTTP/1.1",
 		},
 		{
@@ -57,7 +59,8 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			chunkSize:   100,
 			wantErr:     false,
 			wantMethod:  "POST",
-			wantTarget:  "/coffee",
+			wantPath:    "/coffee",
+			wantRawQuery: "",
 			wantVersion: "HTTP/1.1",
 		},
 		{
@@ -66,7 +69,8 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			chunkSize:   2, // stress test
 			wantErr:     false,
 			wantMethod:  "GET",
-			wantTarget:  "/fragmented",
+			wantPath:    "/fragmented",
+			wantRawQuery: "",
 			wantVersion: "HTTP/1.1",
 		},
 		{
@@ -105,7 +109,8 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			assert.NotNil(t, req)
 			if req != nil {
 				assert.Equal(t, tt.wantMethod, req.Line.Method)
-				assert.Equal(t, tt.wantTarget, req.Line.Target)
+				assert.Equal(t, tt.wantPath, req.Line.Target.Path)
+				assert.Equal(t, tt.wantRawQuery, req.Line.Target.RawQuery)
 				assert.Equal(t, tt.wantVersion, req.Line.Version)
 			}
 		})
