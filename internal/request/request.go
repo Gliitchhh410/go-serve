@@ -9,10 +9,10 @@ import (
 	"errors"
 	"httpServer/internal/headers"
 	"io"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
-	"path"
 )
 
 // Request represents a parsed HTTP request.
@@ -53,6 +53,7 @@ type RequestLine struct {
 type Request struct {
 	// Public fields intended for consumer
 	Line          *RequestLine
+	Host          string
 	Headers       *headers.Headers
 	Body          []byte
 	contentLength int
@@ -77,6 +78,7 @@ var (
 	ErrUnexpectedEOF    = errors.New("unexpected EOF")
 	ErrMethodNotAllowed = errors.New("method not allowed")
 	ErrInvalidTarget    = errors.New("invalid request target")
+	ErrMissingHost      = errors.New("missing or invalid Host header")
 )
 
 var allowedMethods = map[string]bool{
@@ -113,16 +115,12 @@ func parseRequestTarget(raw string) (RequestTarget, error) {
 		return RequestTarget{}, ErrInvalidTarget
 	}
 
-
-
 	index := strings.IndexByte(raw, '?')
 
 	if index == -1 {
 		cleanPath := path.Clean(raw)
 		return RequestTarget{Path: cleanPath, RawQuery: ""}, nil
 	}
-
-	
 
 	return RequestTarget{
 		Path:     path.Clean(raw[:index]),
@@ -165,7 +163,6 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-
 
 	return &RequestLine{
 		Method:  method,
@@ -214,7 +211,12 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 			consumed += bytesParsed
 
 			if done {
-				// --- FIX START ---
+				err := r.validateHost()
+
+				if err != nil {
+					r.transitionTo(stateError)
+					return consumed, err
+				}
 
 				length, err := r.getContentLength()
 				if err != nil {
@@ -335,6 +337,7 @@ func AcquireRequest() *Request {
 
 func (r *Request) Reset() {
 	r.Line = nil
+	r.Host = ""
 	r.Headers.Reset()
 	r.Body = r.Body[:0]
 	r.contentLength = 0
@@ -354,4 +357,16 @@ func validateMethod(method string) error {
 		return ErrMethodNotAllowed
 	}
 	return nil
+}
+
+func (r *Request) validateHost() error {
+	host, ok := r.Headers.Get("host")
+
+	if !ok || len(host) == 0 || strings.Contains(host, ",") {
+		return ErrMissingHost
+	}
+
+	r.Host = host
+	return nil
+
 }
