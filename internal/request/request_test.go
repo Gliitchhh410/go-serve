@@ -28,24 +28,24 @@ func (c *chunkReader) Read(p []byte) (n int, err error) {
 
 func TestRequestFromReader_RequestLine(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		chunkSize   int
-		wantErr     bool
-		wantMethod  string
-		wantPath    string
+		name         string
+		input        string
+		chunkSize    int
+		wantErr      bool
+		wantMethod   string
+		wantPath     string
 		wantRawQuery string
-		wantVersion string
+		wantVersion  string
 	}{
 		{
-			name:        "Valid Basic Request",
-			input:       "GET / HTTP/1.1\r\n\r\n",
-			chunkSize:   100,
-			wantErr:     false,
-			wantMethod:  "GET",
-			wantPath:    "/",
+			name:         "Valid Basic Request",
+			input:        "GET / HTTP/1.1\r\n\r\n",
+			chunkSize:    100,
+			wantErr:      false,
+			wantMethod:   "GET",
+			wantPath:     "/",
 			wantRawQuery: "",
-			wantVersion: "HTTP/1.1",
+			wantVersion:  "HTTP/1.1",
 		},
 		{
 			name:      "Malformed: Broken Version Token",
@@ -54,24 +54,24 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:        "Valid Target Path",
-			input:       "POST /coffee HTTP/1.1\r\n\r\n",
-			chunkSize:   100,
-			wantErr:     false,
-			wantMethod:  "POST",
-			wantPath:    "/coffee",
+			name:         "Valid Target Path",
+			input:        "POST /coffee HTTP/1.1\r\n\r\n",
+			chunkSize:    100,
+			wantErr:      false,
+			wantMethod:   "POST",
+			wantPath:     "/coffee",
 			wantRawQuery: "",
-			wantVersion: "HTTP/1.1",
+			wantVersion:  "HTTP/1.1",
 		},
 		{
-			name:        "Fragmented Valid Request",
-			input:       "GET /fragmented HTTP/1.1\r\n\r\n",
-			chunkSize:   2, // stress test
-			wantErr:     false,
-			wantMethod:  "GET",
-			wantPath:    "/fragmented",
+			name:         "Fragmented Valid Request",
+			input:        "GET /fragmented HTTP/1.1\r\n\r\n",
+			chunkSize:    2, // stress test
+			wantErr:      false,
+			wantMethod:   "GET",
+			wantPath:     "/fragmented",
 			wantRawQuery: "",
-			wantVersion: "HTTP/1.1",
+			wantVersion:  "HTTP/1.1",
 		},
 		{
 			name:      "Malformed: Missing Token",
@@ -414,10 +414,10 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "Unusual Method Token",
-			input:     "CUSTOM-METHOD / HTTP/1.1\r\n\r\n",
-			chunkSize: 100,
-			wantErr:   true,
+			name:        "Unusual Method Token",
+			input:       "CUSTOM-METHOD / HTTP/1.1\r\n\r\n",
+			chunkSize:   100,
+			wantErr:     true,
 			expectedErr: ErrMethodNotAllowed,
 		},
 		{
@@ -460,4 +460,61 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		})
 	}
 
+}
+
+func TestParseRequestTarget(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       string
+		wantPath  string
+		wantQuery string
+		wantErr   error
+	}{
+		{
+			name:      "Basic Path",
+			raw:       "/foo/bar",
+			wantPath:  "/foo/bar",
+			wantQuery: "",
+			wantErr:   nil,
+		},
+		{
+			name:      "Path with Query",
+			raw:       "/search?q=hello&sort=asc",
+			wantPath:  "/search",
+			wantQuery: "q=hello&sort=asc",
+			wantErr:   nil,
+		},
+		{
+			name:      "Duplicate Slashes",
+			raw:       "//foo///bar",
+			wantPath:  "/foo/bar",
+			wantQuery: "",
+			wantErr:   nil,
+		},
+		{
+			name:      "Dot Segments",
+			raw:       "/foo/./bar/../baz",
+			wantPath:  "/foo/baz",
+			wantQuery: "",
+			wantErr:   nil,
+		},
+		{
+			name:    "Malformed",
+			raw:     "foo/bar",
+			wantErr: ErrInvalidTarget,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseRequestTarget(tt.raw)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantPath, got.Path)
+				assert.Equal(t, tt.wantQuery, got.RawQuery)
+			}
+		})
+	}
 }

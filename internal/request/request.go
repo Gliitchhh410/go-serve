@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"path"
 )
 
 // Request represents a parsed HTTP request.
@@ -112,14 +113,19 @@ func parseRequestTarget(raw string) (RequestTarget, error) {
 		return RequestTarget{}, ErrInvalidTarget
 	}
 
+
+
 	index := strings.IndexByte(raw, '?')
 
 	if index == -1 {
-		return RequestTarget{Path: raw, RawQuery: ""}, nil
+		cleanPath := path.Clean(raw)
+		return RequestTarget{Path: cleanPath, RawQuery: ""}, nil
 	}
 
+	
+
 	return RequestTarget{
-		Path:     raw[:index],
+		Path:     path.Clean(raw[:index]),
 		RawQuery: raw[index+1:],
 	}, nil
 }
