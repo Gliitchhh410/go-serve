@@ -39,7 +39,7 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 	}{
 		{
 			name:         "Valid Basic Request",
-			input:        "GET / HTTP/1.1\r\n\r\n",
+			input:        "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
 			chunkSize:    100,
 			wantErr:      false,
 			wantMethod:   "GET",
@@ -55,7 +55,7 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 		},
 		{
 			name:         "Valid Target Path",
-			input:        "POST /coffee HTTP/1.1\r\n\r\n",
+			input:        "POST /coffee HTTP/1.1\r\nHost: localhost\r\n\r\n",
 			chunkSize:    100,
 			wantErr:      false,
 			wantMethod:   "POST",
@@ -65,7 +65,7 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 		},
 		{
 			name:         "Fragmented Valid Request",
-			input:        "GET /fragmented HTTP/1.1\r\n\r\n",
+			input:        "GET /fragmented HTTP/1.1\r\nHost: localhost\r\n\r\n",
 			chunkSize:    2, // stress test
 			wantErr:      false,
 			wantMethod:   "GET",
@@ -172,28 +172,28 @@ func TestRequestFromReader_Body(t *testing.T) {
 	}{
 		{
 			name:      "Valid POST with Body",
-			input:     "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello",
 			chunkSize: 100,
 			wantErr:   false,
 			wantBody:  "hello",
 		},
 		{
 			name:      "Fragmented Body (chunkSize: 1)",
-			input:     "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\ntest",
 			chunkSize: 1,
 			wantErr:   false,
 			wantBody:  "test",
 		},
 		{
 			name:      "Zero Body Default",
-			input:     "GET / HTTP/1.1\r\n\r\n",
+			input:     "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
 			chunkSize: 100,
 			wantErr:   false,
 			wantBody:  "",
 		},
 		{
 			name:      "Invalid Content-Length",
-			input:     "POST / HTTP/1.1\r\nContent-Length: abc\r\n\r\n",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: abc\r\n\r\n",
 			chunkSize: 100,
 			wantErr:   true,
 			wantBody:  "",
@@ -243,9 +243,9 @@ func TestRequest_StateTransitions(t *testing.T) {
 	assert.Equal(t, 16, consumed)
 	assert.Equal(t, stateHeaders, req.state)
 
-	consumed, err = req.parse([]byte("Content-Length: 4\r\n\r\n"))
+	consumed, err = req.parse([]byte("Host: localhost\r\nContent-Length: 4\r\n\r\n"))
 	assert.NoError(t, err)
-	assert.Equal(t, 21, consumed)
+	assert.Equal(t, 38, consumed)
 	assert.Equal(t, stateBody, req.state)
 
 	consumed, err = req.parse([]byte("test"))
@@ -342,6 +342,7 @@ func TestRequestFromReader_LargeHeaderCount(t *testing.T) {
 
 	var buf bytes.Buffer
 	buf.WriteString("GET / HTTP/1.1\r\n")
+	buf.WriteString("Host: localhost\r\n")
 
 	for i := 0; i < headerCount; i++ {
 		fmt.Fprintf(&buf, "X-Test-%d: value-%d\r\n", i, i)
@@ -397,7 +398,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		},
 		{
 			name:      "Header Line with empty value",
-			input:     "GET / HTTP/1.1\r\nEmpty-Header:\r\n\r\n",
+			input:     "GET / HTTP/1.1\r\nHost: localhost\r\nEmpty-Header:\r\n\r\n",
 			chunkSize: 100,
 			wantErr:   false,
 		},
@@ -409,7 +410,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		},
 		{
 			name:      "Query String in Target",
-			input:     "GET /search?q=test HTTP/1.1\r\n\r\n",
+			input:     "GET /search?q=test HTTP/1.1\r\nHost: localhost\r\n\r\n",
 			chunkSize: 100,
 			wantErr:   false,
 		},
@@ -422,9 +423,23 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		},
 		{
 			name:      "Extreme Framentation",
-			input:     "POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\nbody",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nbody",
 			chunkSize: 1,
 			wantErr:   false,
+		},
+		{
+			name:        "Missing Host Header",
+			input:       "GET / HTTP/1.1\r\nAccept: */*\r\n\r\n",
+			chunkSize:   100,
+			wantErr:     true,
+			expectedErr: ErrMissingHost,
+		},
+		{
+			name:        "Duplicate Host Header",
+			input:       "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n",
+			chunkSize:   100,
+			wantErr:     true,
+			expectedErr: ErrMissingHost,
 		},
 		{
 			name:        "Immediate EOF after partial headers",
@@ -435,7 +450,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 		},
 		{
 			name:        "Immediate EOF mid-body",
-			input:       "POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nhalf",
+			input:       "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nhalf",
 			chunkSize:   100,
 			wantErr:     true,
 			expectedErr: ErrUnexpectedEOF,
