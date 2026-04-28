@@ -52,12 +52,13 @@ type RequestLine struct {
 
 type Request struct {
 	// Public fields intended for consumer
-	Line          *RequestLine
-	Host          string
-	Headers       *headers.Headers
-	Body          []byte
-	contentLength int
-	state         int
+	Line             *RequestLine
+	Host             string
+	Headers          *headers.Headers
+	Body             []byte
+	contentLength    int
+	transferEncoding int
+	state            int
 }
 
 const (
@@ -66,6 +67,11 @@ const (
 	stateBody
 	stateDone
 	stateError
+)
+
+const (
+	encodingIdentity = iota // Standard Content-Length parsing
+	encodingChunked         // Chunked Parsing
 )
 
 var ( // Carriage Return + Line Feed
@@ -218,6 +224,16 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 					return consumed, err
 				}
 
+				te, ok := r.Headers.Get("transfer-encoding")
+				if ok && te == "chunked" {
+					r.transferEncoding = encodingChunked
+					r.transitionTo(stateBody)
+					continue
+				}
+
+				r.transferEncoding = encodingIdentity
+				r.transitionTo(stateBody)
+
 				length, err := r.getContentLength()
 				if err != nil {
 					r.transitionTo(stateError)
@@ -240,14 +256,15 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 
 				r.transitionTo(stateBody)
 
-				// --- FIX END ---
 			} else {
 				return consumed, nil
 			}
 
 		case stateBody:
-			// --- FIX: removed `if r.Body == nil` block entirely ---
 
+			if r.transferEncoding == encodingChunked {
+				return consumed, errors.New("Chunked parsing not implemented yet!!!")
+			}
 			remaining := r.contentLength - len(r.Body)
 			available := len(data) - consumed
 
@@ -338,6 +355,7 @@ func AcquireRequest() *Request {
 func (r *Request) Reset() {
 	r.Line = nil
 	r.Host = ""
+	r.transferEncoding = 0
 	r.Headers.Reset()
 	r.Body = r.Body[:0]
 	r.contentLength = 0
