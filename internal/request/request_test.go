@@ -545,6 +545,7 @@ func TestRequestFromReader_ChunkedBody(t *testing.T) {
 		chunkSize int
 		wantBody  string
 		wantErr   bool
+		expectedErr error
 	}{
 		{
 			name:      "Single Chunk",
@@ -572,6 +573,13 @@ func TestRequestFromReader_ChunkedBody(t *testing.T) {
 			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZZ\r\nWiki\r\n0\r\n\r\n",
 			chunkSize: 100,
 			wantErr:   true,
+		},
+		{
+			name:        "Unsupported Transfer-Encoding",
+			input:       "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: gzip\r\n\r\n...",
+			chunkSize:   100,
+			wantErr:     true,
+			expectedErr: ErrUnsupportedTransferEncoding,
 		},
 	}
 

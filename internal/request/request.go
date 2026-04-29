@@ -81,12 +81,13 @@ var ( // Carriage Return + Line Feed
 )
 
 var (
-	ErrMalformedRequest = errors.New("malformed HTTP request")
-	ErrInvalidState     = errors.New("invalid parsing state")
-	ErrUnexpectedEOF    = errors.New("unexpected EOF")
-	ErrMethodNotAllowed = errors.New("method not allowed")
-	ErrInvalidTarget    = errors.New("invalid request target")
-	ErrMissingHost      = errors.New("missing or invalid Host header")
+	ErrMalformedRequest            = errors.New("malformed HTTP request")
+	ErrInvalidState                = errors.New("invalid parsing state")
+	ErrUnexpectedEOF               = errors.New("unexpected EOF")
+	ErrMethodNotAllowed            = errors.New("method not allowed")
+	ErrInvalidTarget               = errors.New("invalid request target")
+	ErrMissingHost                 = errors.New("missing or invalid Host header")
+	ErrUnsupportedTransferEncoding = errors.New("unsupported transfer encoding")
 )
 
 var allowedMethods = map[string]bool{
@@ -228,6 +229,15 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 				}
 
 				te, ok := r.Headers.Get("transfer-encoding")
+
+				if ok {
+					err = checkTransferEncoding(te)
+					if err != nil {
+						r.transitionTo(stateError)
+						return consumed, err
+					}
+				}
+
 				if ok && te == "chunked" {
 					r.transferEncoding = encodingChunked
 					r.transitionTo(stateBody)
@@ -471,4 +481,12 @@ func (r *Request) parseChunkBody(data []byte) (consumed int, done bool, err erro
 	}
 
 	return consumed, false, nil
+}
+
+func checkTransferEncoding(value string) error {
+	if value != "identity" && value != "chunked" {
+		return ErrUnsupportedTransferEncoding
+	}
+	return nil
+
 }
