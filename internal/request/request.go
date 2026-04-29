@@ -483,6 +483,10 @@ func (r *Request) parseChunkBody(data []byte) (consumed int, done bool, err erro
 	return consumed, false, nil
 }
 
+// checkTransferEncoding validates Transfer-Encoding for this parser.
+//
+// The parser supports only "identity" and "chunked" transfer encodings.
+// Any other Transfer-Encoding value returns ErrUnsupportedTransferEncoding.
 func checkTransferEncoding(value string) error {
 	if value != "identity" && value != "chunked" {
 		return ErrUnsupportedTransferEncoding
