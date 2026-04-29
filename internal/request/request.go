@@ -52,13 +52,15 @@ type RequestLine struct {
 
 type Request struct {
 	// Public fields intended for consumer
-	Line             *RequestLine
-	Host             string
-	Headers          *headers.Headers
-	Body             []byte
-	contentLength    int
-	transferEncoding int
-	state            int
+	Line               *RequestLine
+	Host               string
+	Headers            *headers.Headers
+	Body               []byte
+	contentLength      int
+	transferEncoding   int
+	state              int
+	chunkSizeRemaining int
+	parsingChunkHeader bool
 }
 
 const (
@@ -104,8 +106,9 @@ var requestPool = sync.Pool{
 
 func NewRequest() *Request {
 	return &Request{
-		Headers: headers.New(),
-		state:   stateInit,
+		Headers:            headers.New(),
+		state:              stateInit,
+		parsingChunkHeader: true,
 	}
 }
 
@@ -232,8 +235,6 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 				}
 
 				r.transferEncoding = encodingIdentity
-				r.transitionTo(stateBody)
-
 				length, err := r.getContentLength()
 				if err != nil {
 					r.transitionTo(stateError)
@@ -263,8 +264,18 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		case stateBody:
 
 			if r.transferEncoding == encodingChunked {
-				return consumed, errors.New("Chunked parsing not implemented yet!!!")
+				bytesParsed, done, err := r.parseChunkBody(data[consumed:])
+				consumed += bytesParsed
+				if err != nil {
+					r.transitionTo(stateError)
+					return consumed, err
+				}
+				if done {
+					r.transitionTo(stateDone)
+				}
+				return consumed, nil
 			}
+
 			remaining := r.contentLength - len(r.Body)
 			available := len(data) - consumed
 
@@ -359,6 +370,8 @@ func (r *Request) Reset() {
 	r.Headers.Reset()
 	r.Body = r.Body[:0]
 	r.contentLength = 0
+	r.chunkSizeRemaining = 0
+	r.parsingChunkHeader = true
 	r.transitionTo(stateInit)
 }
 
@@ -387,4 +400,75 @@ func (r *Request) validateHost() error {
 	r.Host = host
 	return nil
 
+}
+
+func (r *Request) parseChunkBody(data []byte) (consumed int, done bool, err error) {
+	consumed = 0
+
+	for consumed < len(data) {
+		if r.parsingChunkHeader {
+			index := bytes.Index(data[consumed:], crlfBytes)
+			if index == -1 {
+				return consumed, false, nil // wait for full chunk header
+			}
+
+			hexData := data[consumed : consumed+index]
+			semiIdx := bytes.IndexByte(hexData, ';')
+			if semiIdx != -1 {
+				hexData = hexData[:semiIdx]
+			}
+
+			size, err := strconv.ParseInt(string(hexData), 16, 64)
+			if err != nil {
+				return consumed, false, ErrMalformedRequest
+			}
+
+			if size == 0 {
+				// Final chunk: '0' + CRLF + final CRLF
+				totalNeeded := index + 4
+				if len(data[consumed:]) < totalNeeded {
+					return consumed, false, nil // wait for final CRLF
+				}
+
+				if !bytes.Equal(data[consumed+index+2:consumed+totalNeeded], crlfBytes) {
+					return consumed, false, ErrMalformedRequest
+				}
+
+				consumed += totalNeeded
+				return consumed, true, nil
+			}
+
+			consumed += index + 2
+			r.chunkSizeRemaining = int(size)
+			r.parsingChunkHeader = false
+
+		} else {
+			// Phase 1: Consume Payload
+			if r.chunkSizeRemaining > 0 {
+				available := len(data) - consumed
+				take := available
+				if take > r.chunkSizeRemaining {
+					take = r.chunkSizeRemaining
+				}
+				r.Body = append(r.Body, data[consumed:consumed+take]...)
+				r.chunkSizeRemaining -= take
+				consumed += take
+			}
+
+			// Phase 2: Consume trailing CRLF
+			if r.chunkSizeRemaining == 0 {
+				available := len(data) - consumed
+				if available < 2 {
+					return consumed, false, nil // wait for the trailing CRLF
+				}
+				if !bytes.Equal(data[consumed:consumed+2], crlfBytes) {
+					return consumed, false, ErrMalformedRequest
+				}
+				consumed += 2
+				r.parsingChunkHeader = true
+			}
+		}
+	}
+
+	return consumed, false, nil
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type chunkReader struct {
@@ -529,6 +530,66 @@ func TestParseRequestTarget(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.wantPath, got.Path)
 				assert.Equal(t, tt.wantQuery, got.RawQuery)
+			}
+		})
+	}
+}
+
+// internal/request/request_test.go
+
+// TASK: Add a new test suite for chunked bodies
+func TestRequestFromReader_ChunkedBody(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		chunkSize int
+		wantBody  string
+		wantErr   bool
+	}{
+		{
+			name:      "Single Chunk",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n0\r\n\r\n",
+			chunkSize: 100,
+			wantBody:  "Wiki",
+			wantErr:   false,
+		},
+		{
+			name:      "Multiple Chunks",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n",
+			chunkSize: 100,
+			wantBody:  "Wikipedia",
+			wantErr:   false,
+		},
+		{
+			name:      "Fragmented Multi-Chunk",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n",
+			chunkSize: 1, // Extreme fragmentation
+			wantBody:  "Wikipedia",
+			wantErr:   false,
+		},
+		{
+			name:      "Malformed Chunk Size",
+			input:     "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZZ\r\nWiki\r\n0\r\n\r\n",
+			chunkSize: 100,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &chunkReader{
+				data:      []byte(tt.input),
+				chunkSize: tt.chunkSize,
+			}
+
+			req, err := RequestFromReader(cr)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, req)
+				require.Equal(t, tt.wantBody, string(req.Body))
 			}
 		})
 	}
