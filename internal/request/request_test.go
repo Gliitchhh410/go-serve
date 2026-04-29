@@ -540,11 +540,11 @@ func TestParseRequestTarget(t *testing.T) {
 // TASK: Add a new test suite for chunked bodies
 func TestRequestFromReader_ChunkedBody(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		chunkSize int
-		wantBody  string
-		wantErr   bool
+		name        string
+		input       string
+		chunkSize   int
+		wantBody    string
+		wantErr     bool
 		expectedErr error
 	}{
 		{
@@ -600,5 +600,39 @@ func TestRequestFromReader_ChunkedBody(t *testing.T) {
 				require.Equal(t, tt.wantBody, string(req.Body))
 			}
 		})
+	}
+}
+
+func TestRequestFromReader_UnsupportedTransferEncoding(t *testing.T) {
+	tests := []struct {
+		name    string
+		input string
+	}{
+		{
+			name:    "Gzip Encoding",
+			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: gzip\r\n\r\n",
+		},
+		{
+			name:    "Deflate Encoding",
+			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: deflate\r\n\r\n",
+		},
+		{
+			name:    "Compress Encoding",
+			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: compress\r\n\r\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &chunkReader{
+				data:      []byte(tt.input),
+				chunkSize: 100,
+			}
+
+			req, err := RequestFromReader(cr)
+			require.ErrorIs(t, err, ErrUnsupportedTransferEncoding)
+			require.Nil(t, req)
+		})
+
 	}
 }
