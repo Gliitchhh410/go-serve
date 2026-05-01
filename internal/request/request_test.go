@@ -154,9 +154,9 @@ func TestRequestFromReader_Headers(t *testing.T) {
 			assert.NotNil(t, req)
 			if req != nil {
 				for k, v := range tt.wantHeaders {
-					val, ok := req.Headers.Get(k)
+					val, ok := req.Headers.Get([]byte(k))
 					assert.True(t, ok)
-					assert.Equal(t, v, val)
+					assert.Equal(t, v, string(val))
 				}
 			}
 		})
@@ -362,9 +362,9 @@ func TestRequestFromReader_LargeHeaderCount(t *testing.T) {
 		key := fmt.Sprintf("x-test-%d", i) // assuming lowercase normalization
 		expected := fmt.Sprintf("value-%d", i)
 
-		val, ok := req.Headers.Get(key)
+		val, ok := req.Headers.Get([]byte(key))
 		assert.True(t, ok, "missing header %s", key)
-		assert.Equal(t, expected, val)
+		assert.Equal(t, expected, string(val))
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"io"
 	"path"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -77,7 +76,13 @@ const (
 )
 
 var ( // Carriage Return + Line Feed
-	crlfBytes = []byte("\r\n")
+	crlfBytes              = []byte("\r\n")
+	versionHTTP11          = []byte("HTTP/1.1")
+	headerTransferEncoding = []byte("transfer-encoding")
+	headerChunked          = []byte("chunked")
+	headerHost             = []byte("host")
+	headerContentLength    = []byte("content-length")
+	headerIdentity         = []byte("identity")
 )
 
 var (
@@ -176,7 +181,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	if len(method) == 0 || len(targetRaw) == 0 || len(version) == 0 {
 		return nil, 0, ErrMalformedRequest
 	}
-	if !bytes.Equal(version, []byte("HTTP/1.1")) {
+	if !bytes.Equal(version, versionHTTP11) {
 		return nil, 0, ErrMalformedRequest
 	}
 
@@ -239,7 +244,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 					return consumed, err
 				}
 
-				te, ok := r.Headers.Get("transfer-encoding")
+				te, ok := r.Headers.Get(headerTransferEncoding)
 
 				if ok {
 					err = checkTransferEncoding(te)
@@ -249,7 +254,7 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 					}
 				}
 
-				if ok && te == "chunked" {
+				if ok && bytes.Equal(te, headerChunked) {
 					r.transferEncoding = encodingChunked
 					r.transitionTo(stateBody)
 					continue
@@ -348,7 +353,8 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		}
 
 		if consumed > 0 {
-			req.Line.own()
+			req.Headers.Own()
+			req.Line.Own()
 			if consumed == bufferedBytes {
 				bufferedBytes = 0
 			} else {
@@ -363,12 +369,12 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 }
 
 func (r *Request) getContentLength() (int, error) {
-	val, ok := r.Headers.Get("content-length")
+	val, ok := r.Headers.Get(headerContentLength)
 	if !ok {
 		return 0, nil
 	}
 
-	contentLength, err := strconv.Atoi(val)
+	contentLength, err := strconv.Atoi(string(val))
 	if err != nil || contentLength < 0 {
 		return 0, ErrMalformedRequest
 	}
@@ -413,13 +419,13 @@ func validateMethod(method []byte) error {
 }
 
 func (r *Request) validateHost() error {
-	host, ok := r.Headers.Get("host")
+	host, ok := r.Headers.Get(headerHost)
 
-	if !ok || len(host) == 0 || strings.Contains(host, ",") {
+	if !ok || len(host) == 0 || bytes.ContainsRune(host, ',') {
 		return ErrMissingHost
 	}
 
-	r.Host = host
+	r.Host = string(host)
 	return nil
 
 }
@@ -499,8 +505,8 @@ func (r *Request) parseChunkBody(data []byte) (consumed int, done bool, err erro
 //
 // The parser supports only "identity" and "chunked" transfer encodings.
 // Any other Transfer-Encoding value returns ErrUnsupportedTransferEncoding.
-func checkTransferEncoding(value string) error {
-	if value != "identity" && value != "chunked" {
+func checkTransferEncoding(value []byte) error {
+	if !bytes.Equal(value, headerIdentity) && !bytes.Equal(value, headerChunked) {
 		return ErrUnsupportedTransferEncoding
 	}
 	return nil
@@ -511,7 +517,7 @@ func checkTransferEncoding(value string) error {
 //
 // replacing the slice headers to point into it.
 // Call this before any operation that may overwrite the source buffer.
-func (rl *RequestLine) own() {
+func (rl *RequestLine) Own() {
 	if rl == nil {
 		return
 	}

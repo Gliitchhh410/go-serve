@@ -4,51 +4,69 @@
 
 package headers
 
-import "strings"
+import (
+	"bytes"
+)
 
+type Header struct {
+	Name  []byte
+	Value []byte
+}
 type Headers struct {
-	m map[string][]string
+	entries []Header
 }
 
 func New() *Headers {
 	return &Headers{
-		m: make(map[string][]string),
+		entries: make([]Header, 0, 32),
 	}
 }
 
 // Set adds a Header. Keys are normalized to lowercase. Duplicate headers are concatenated with a comma.
-func (h *Headers) Set(name, value string) {
-	// Fast path: assume already lowercase
-	key := name
-
-	// Only lowercase if needed
-	for i := 0; i < len(name); i++ {
-		if name[i] >= 'A' && name[i] <= 'Z' {
-			key = strings.ToLower(name)
-			break
+func (h *Headers) Set(name []byte, value []byte) {
+	name = normalizeHeaderName(name)
+	for i := range h.entries {
+		if bytes.Equal(h.entries[i].Name, name) {
+			//Append ", " + value
+			combined := make([]byte, len(h.entries[i].Value)+2+len(value))
+			n := copy(combined, h.entries[i].Value)
+			n += copy(combined[n:], ", ")
+			copy(combined[n:], value)
+			h.entries[i].Value = combined
+			return
 		}
 	}
-
-	h.m[key] = append(h.m[key], value)
+	h.entries = append(h.entries, Header{Name: name, Value: value})
 }
 
-func (h *Headers) Get(name string) (string, bool) {
-	key := strings.ToLower(name)
-	values, ok := h.m[key]
-	if !ok || len(values) == 0 {
-		return "", false
+func (h *Headers) Get(name []byte) ([]byte, bool) {
+	name = normalizeHeaderName(name)
+
+	for i := range h.entries {
+		if bytes.Equal(h.entries[i].Name, name) {
+			return h.entries[i].Value, true
+		}
 	}
-	return strings.Join(values, ", "), true
+	return nil, false
 }
 
-func (h *Headers) ForEach(fn func(name, value string)) {
-	for name, values := range h.m {
-		fn(name, strings.Join(values, ", "))
+func (h *Headers) ForEach(fn func(name, value []byte)) {
+	for i := range h.entries {
+		fn(h.entries[i].Name, h.entries[i].Value)
 	}
 }
 
+func normalizeHeaderName(name []byte) []byte {
+	return bytes.ToLower(name)
+}
 
+func (h *Headers) Reset() {
+	h.entries = h.entries[:0] // retain backing array for reuse
+}
 
-func (h *Headers) Reset(){
-	clear(h.m)
+func (h *Headers) Own() {
+	for i := range h.entries {
+		h.entries[i].Name = bytes.Clone(h.entries[i].Name)
+		h.entries[i].Value = bytes.Clone(h.entries[i].Value)
+	}
 }

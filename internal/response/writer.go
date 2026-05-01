@@ -32,18 +32,18 @@ func (rw *ResponseWriter) SetStatus(code int){
 }
 
 func (rw *ResponseWriter) SetHeader(name, value string){
-	rw.Headers.Set(name, value)
+	rw.Headers.Set([]byte(name), []byte(value))
 }
 
 func (rw *ResponseWriter) SetBody(body []byte){
 	rw.Body = body
-	rw.SetHeader("Content-Length", strconv.Itoa(len(body)))
+	rw.Headers.Set([]byte("content-length"), []byte(strconv.Itoa(len(body))))
 }
 
 func (rw *ResponseWriter) Send() error {
 	fmt.Fprintf(rw.conn, "HTTP/1.1 %d %s\r\n", rw.StatusCode, rw.Reason)
-	rw.Headers.ForEach(func(name, value string){
-		fmt.Fprintf(rw.conn, "%s: %s\r\n", name, value)
+	rw.Headers.ForEach(func(name, value []byte){
+		fmt.Fprintf(rw.conn, "%s: %s\r\n", string(name), string(value))
 	})
 	fmt.Fprintf(rw.conn, "\r\n")
 

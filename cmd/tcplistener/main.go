@@ -65,8 +65,8 @@ func main() {
 			log.Printf("Method: %s\n", req.Line.Method)
 			log.Printf("Target: %s\n", req.Line.Target)
 			log.Printf("Version: %s\n", req.Line.Version)
-			req.Headers.ForEach(func(name, value string) {
-				log.Printf("Header: %s: %s\n", name, value)
+			req.Headers.ForEach(func(name, value []byte) {
+				log.Printf("Header: %s: %s\n", string(name), string(value))
 			})
 			log.Printf("Body: %s\n", string(req.Body))
 		}

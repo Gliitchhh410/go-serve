@@ -3,7 +3,7 @@ package headers
 import (
 	"bytes"
 	"errors"
-	"strings"
+	
 )
 
 var ErrMalformedHeader = errors.New("malformed header")
@@ -34,24 +34,24 @@ func isValidToken(b byte) bool {
 	return isValid
 }
 
-func parseHeader(line []byte) (name string, value string, err error) {
+func parseHeader(line []byte) (name , value []byte, err error) {
 	// parts := bytes.SplitN(line, []byte(":"), 2)
 	s1 := bytes.IndexByte(line, colonByte)
 	if s1 == -1 {
-		return "", "", ErrMalformedHeader
+		return nil, nil, ErrMalformedHeader
 	}
-	name = string(line[:s1])
-	value = string(bytes.TrimSpace(line[s1+1:]))
+	name = line[:s1]
+	value = bytes.TrimSpace(line[s1+1:])
 
 
 
 	if len(name) < 1 || name[len(name)-1] == ' ' {
-		return "", "", ErrMalformedHeader
+		return nil, nil, ErrMalformedHeader
 	}
 
 	for i := 0; i < len(name); i++ {
 		if !isValidToken(name[i]) {
-			return "", "", ErrMalformedHeader
+			return nil, nil, ErrMalformedHeader
 		}
 	}
 	return name, value, nil
@@ -80,8 +80,7 @@ func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 		if err != nil {
 			return consumed, false, err
 		}
-		key := strings.ToLower(name)
-		h.Set(key, value)
+		h.Set(name, value)
 		consumed += segmentLength
 
 	}
