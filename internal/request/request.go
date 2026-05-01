@@ -50,6 +50,24 @@ type RequestLine struct {
 	Version []byte
 }
 
+// Request represents a parsed HTTP/1.1 request.
+//
+// # Memory Model
+//
+// Request is zero-allocation. All fields (Line, Headers, Body) are slice
+// windows into a pooled buffer and are only valid until ReleaseRequest is
+// called. After that point, the underlying memory is returned to the pool
+// and may be overwritten by a subsequent request.
+//
+// If any field must outlive the request's lifetime (e.g. passed to a
+// goroutine or stored beyond the handler's return), the caller must
+// explicitly copy the data:
+//
+//	body := bytes.Clone(req.Body)
+//	go process(body) // safe: owns its own memory
+//
+// Retaining a slice from Request after ReleaseRequest is a data race.
+
 type Request struct {
 	// Public fields intended for consumer
 	Line               RequestLine
@@ -425,6 +443,16 @@ func (r *Request) Reset() {
 	r.rawBuffer = nil
 	r.transitionTo(stateInit)
 }
+
+// ReleaseRequest returns r to the request pool and releases its underlying
+// buffer back to the buffer pool.
+//
+// After this call, r and all slices derived from it (r.Line.Method,
+// r.Line.Target.Path, r.Headers entries, r.Body, etc.) must not be read
+// or written. Doing so is a critical error that will cause silent data
+// corruption as the buffer will be reused for another request.
+//
+// ReleaseRequest is safe to call with a nil pointer.
 
 func ReleaseRequest(r *Request) {
 	if r == nil {
