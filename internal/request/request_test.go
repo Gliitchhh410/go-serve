@@ -640,3 +640,25 @@ func TestRequestFromReader_UnsupportedTransferEncoding(t *testing.T) {
 
 	}
 }
+
+
+func FuzzRequestFromReader(f *testing.F) {
+	f.Add([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+	f.Add([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello"))
+	f.Add([]byte("GET /foo?bar=baz HTTP/1.1\r\nHost: localhost\r\nAccept: text/plain\r\n\r\n"))
+	f.Add([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.0\r\n\r\n"))
+	f.Add([]byte("INVALID"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		req, err := RequestFromReader(bytes.NewReader(data))
+		
+		if err != nil {
+			return
+		}
+		if req != nil {
+			ReleaseRequest(req)
+		}
+		
+	})
+}
