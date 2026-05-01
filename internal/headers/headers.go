@@ -24,9 +24,8 @@ func New() *Headers {
 
 // Set adds a Header. Keys are normalized to lowercase. Duplicate headers are concatenated with a comma.
 func (h *Headers) Set(name []byte, value []byte) {
-	name = normalizeHeaderName(name)
 	for i := range h.entries {
-		if bytes.Equal(h.entries[i].Name, name) {
+		if bytes.EqualFold(h.entries[i].Name, name) {
 			//Append ", " + value
 			combined := make([]byte, len(h.entries[i].Value)+2+len(value))
 			n := copy(combined, h.entries[i].Value)
@@ -40,10 +39,8 @@ func (h *Headers) Set(name []byte, value []byte) {
 }
 
 func (h *Headers) Get(name []byte) ([]byte, bool) {
-	name = normalizeHeaderName(name)
-
 	for i := range h.entries {
-		if bytes.Equal(h.entries[i].Name, name) {
+		if bytes.EqualFold(h.entries[i].Name, name) {
 			return h.entries[i].Value, true
 		}
 	}
@@ -56,9 +53,6 @@ func (h *Headers) ForEach(fn func(name, value []byte)) {
 	}
 }
 
-func normalizeHeaderName(name []byte) []byte {
-	return bytes.ToLower(name)
-}
 
 func (h *Headers) Reset() {
 	h.entries = h.entries[:0] // retain backing array for reuse

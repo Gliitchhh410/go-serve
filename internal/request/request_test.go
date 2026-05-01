@@ -503,14 +503,14 @@ func TestParseRequestTarget(t *testing.T) {
 		{
 			name:      "Duplicate Slashes",
 			raw:       "//foo///bar",
-			wantPath:  "/foo/bar",
+			wantPath:  "//foo///bar",
 			wantQuery: "",
 			wantErr:   nil,
 		},
 		{
 			name:      "Dot Segments",
 			raw:       "/foo/./bar/../baz",
-			wantPath:  "/foo/baz",
+			wantPath:  "/foo/./bar/../baz",
 			wantQuery: "",
 			wantErr:   nil,
 		},

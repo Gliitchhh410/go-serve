@@ -9,7 +9,7 @@ import (
 	"errors"
 	"httpServer/internal/headers"
 	"io"
-	"path"
+	// "path"
 	"strconv"
 	"sync"
 )
@@ -143,10 +143,10 @@ func parseRequestTarget(raw []byte) (RequestTarget, error) {
 		querySlice = raw[index+1:]
 	}
 
-	cleaned := path.Clean(string(pathSlice))
-	if cleaned != string(pathSlice) {
-		pathSlice = []byte(cleaned)
-	}
+	// cleaned := path.Clean(string(pathSlice))
+	// if cleaned != string(pathSlice) {
+	// 	pathSlice = []byte(cleaned)
+	// }
 
 	return RequestTarget{
 		Path:     pathSlice,
