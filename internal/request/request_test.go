@@ -109,10 +109,10 @@ func TestRequestFromReader_RequestLine(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, req)
 			if req != nil {
-				assert.Equal(t, tt.wantMethod, req.Line.Method)
-				assert.Equal(t, tt.wantPath, req.Line.Target.Path)
-				assert.Equal(t, tt.wantRawQuery, req.Line.Target.RawQuery)
-				assert.Equal(t, tt.wantVersion, req.Line.Version)
+				assert.Equal(t, tt.wantMethod, string(req.Line.Method))
+				assert.Equal(t, tt.wantPath, string(req.Line.Target.Path))
+				assert.Equal(t, tt.wantRawQuery, string(req.Line.Target.RawQuery))
+				assert.Equal(t, tt.wantVersion, string(req.Line.Version))
 			}
 		})
 	}
@@ -384,7 +384,7 @@ func TestRequestFromReader_EdgeCases(t *testing.T) {
 			expectedErr: ErrUnexpectedEOF,
 		},
 		{
-			name:        "Input with onlt crlf",
+			name:        "Input with only crlf",
 			input:       "\r\n",
 			chunkSize:   100,
 			wantErr:     true,
@@ -523,13 +523,13 @@ func TestParseRequestTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseRequestTarget(tt.raw)
+			got, err := parseRequestTarget([]byte(tt.raw))
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.wantPath, got.Path)
-				assert.Equal(t, tt.wantQuery, got.RawQuery)
+				assert.Equal(t, tt.wantPath, string(got.Path))
+				assert.Equal(t, tt.wantQuery, string(got.RawQuery))
 			}
 		})
 	}
@@ -605,19 +605,19 @@ func TestRequestFromReader_ChunkedBody(t *testing.T) {
 
 func TestRequestFromReader_UnsupportedTransferEncoding(t *testing.T) {
 	tests := []struct {
-		name    string
+		name  string
 		input string
 	}{
 		{
-			name:    "Gzip Encoding",
+			name:  "Gzip Encoding",
 			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: gzip\r\n\r\n",
 		},
 		{
-			name:    "Deflate Encoding",
+			name:  "Deflate Encoding",
 			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: deflate\r\n\r\n",
 		},
 		{
-			name:    "Compress Encoding",
+			name:  "Compress Encoding",
 			input: "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: compress\r\n\r\n",
 		},
 	}

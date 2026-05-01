@@ -41,13 +41,13 @@ import (
 //
 
 type RequestTarget struct {
-	Path     string
-	RawQuery string
+	Path     []byte
+	RawQuery []byte
 }
 type RequestLine struct {
-	Method  string
+	Method  []byte
 	Target  RequestTarget
-	Version string
+	Version []byte
 }
 
 type Request struct {
@@ -120,21 +120,32 @@ func (r *Request) done() bool {
 	return false
 }
 
-func parseRequestTarget(raw string) (RequestTarget, error) {
+func parseRequestTarget(raw []byte) (RequestTarget, error) {
 	if len(raw) == 0 || raw[0] != '/' {
 		return RequestTarget{}, ErrInvalidTarget
 	}
 
-	index := strings.IndexByte(raw, '?')
+	index := bytes.IndexByte(raw, '?')
+
+	var pathSlice []byte
+	var querySlice []byte
 
 	if index == -1 {
-		cleanPath := path.Clean(raw)
-		return RequestTarget{Path: cleanPath, RawQuery: ""}, nil
+		pathSlice = raw
+		querySlice = nil
+	} else {
+		pathSlice = raw[:index]
+		querySlice = raw[index+1:]
+	}
+
+	cleaned := path.Clean(string(pathSlice))
+	if cleaned != string(pathSlice) {
+		pathSlice = []byte(cleaned)
 	}
 
 	return RequestTarget{
-		Path:     path.Clean(raw[:index]),
-		RawQuery: raw[index+1:],
+		Path:     pathSlice,
+		RawQuery: querySlice,
 	}, nil
 }
 
@@ -159,13 +170,13 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 	s2 += s1 + 1
 
-	method := string(line[:s1])
-	targetRaw := string(line[s1+1 : s2])
-	version := string(line[s2+1:])
+	method := line[:s1]
+	targetRaw := line[s1+1 : s2]
+	version := line[s2+1:]
 	if len(method) == 0 || len(targetRaw) == 0 || len(version) == 0 {
 		return nil, 0, ErrMalformedRequest
 	}
-	if version != "HTTP/1.1" {
+	if !bytes.Equal(version, []byte("HTTP/1.1")) {
 		return nil, 0, ErrMalformedRequest
 	}
 
@@ -337,6 +348,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		}
 
 		if consumed > 0 {
+			req.Line.own()
 			if consumed == bufferedBytes {
 				bufferedBytes = 0
 			} else {
@@ -392,9 +404,9 @@ func ReleaseRequest(r *Request) {
 	r.Reset()
 	requestPool.Put(r)
 }
-func validateMethod(method string) error {
-	_, ok := allowedMethods[method]
-	if !ok {
+func validateMethod(method []byte) error {
+	// unsafe.String creates a string header without allocation
+	if _, ok := allowedMethods[string(method)]; !ok {
 		return ErrMethodNotAllowed
 	}
 	return nil
@@ -493,4 +505,33 @@ func checkTransferEncoding(value string) error {
 	}
 	return nil
 
+}
+
+// own copies the request line data into a single owned buffer,
+//
+// replacing the slice headers to point into it.
+// Call this before any operation that may overwrite the source buffer.
+func (rl *RequestLine) own() {
+	if rl == nil {
+		return
+	}
+
+	// One allocation covers method + " " + target + " " + version
+	// Reslice from that single backing array.
+	size := len(rl.Method) + len(rl.Target.Path) + len(rl.Target.RawQuery) + len(rl.Version)
+	buf := make([]byte, size)
+
+	n := copy(buf, rl.Method)
+	rl.Method = buf[:n]
+
+	m := copy(buf[n:], rl.Target.Path)
+	rl.Target.Path = buf[n : n+m]
+	n += m
+
+	q := copy(buf[n:], rl.Target.RawQuery)
+	rl.Target.RawQuery = buf[n : n+q]
+	n += q
+
+	copy(buf[n:], rl.Version)
+	rl.Version = buf[n : n+len(rl.Version)]
 }
