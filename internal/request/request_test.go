@@ -526,7 +526,8 @@ func TestParseRequestTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseRequestTarget([]byte(tt.raw))
+			var got RequestTarget
+			err := parseRequestTarget([]byte(tt.raw), &got)
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {

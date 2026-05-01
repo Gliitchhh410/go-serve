@@ -52,8 +52,8 @@ type RequestLine struct {
 
 type Request struct {
 	// Public fields intended for consumer
-	Line               *RequestLine
-	Host               string
+	Line               RequestLine
+	Host               []byte
 	Headers            *headers.Headers
 	Body               []byte
 	contentLength      int
@@ -61,6 +61,7 @@ type Request struct {
 	state              int
 	chunkSizeRemaining int
 	parsingChunkHeader bool
+	rawBuffer          *[]byte
 }
 
 const (
@@ -113,7 +114,7 @@ var requestPool = sync.Pool{
 
 var bufferPool = sync.Pool{
 	New: func() any {
-		b := make([]byte, 4096)
+		b := make([]byte, 128*4096)
 		return &b
 	},
 }
@@ -144,9 +145,9 @@ func (r *Request) done() bool {
 	return false
 }
 
-func parseRequestTarget(raw []byte) (RequestTarget, error) {
+func parseRequestTarget(raw []byte, dst *RequestTarget) error {
 	if len(raw) == 0 || raw[0] != '/' {
-		return RequestTarget{}, ErrInvalidTarget
+		return ErrInvalidTarget
 	}
 
 	index := bytes.IndexByte(raw, '?')
@@ -167,16 +168,15 @@ func parseRequestTarget(raw []byte) (RequestTarget, error) {
 	// 	pathSlice = []byte(cleaned)
 	// }
 
-	return RequestTarget{
-		Path:     pathSlice,
-		RawQuery: querySlice,
-	}, nil
+	dst.Path = pathSlice
+	dst.RawQuery = querySlice
+	return nil
 }
 
-func parseRequestLine(data []byte) (*RequestLine, int, error) {
+func parseRequestLine(data []byte, dst *RequestLine) (int, error) {
 	index := bytes.Index(data, crlfBytes)
 	if index == -1 {
-		return nil, 0, nil
+		return 0, nil
 	}
 	line := data[:index]
 
@@ -184,12 +184,12 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 	s1 := bytes.IndexByte(line, ' ')
 	if s1 == -1 {
-		return nil, 0, ErrMalformedRequest
+		return 0, ErrMalformedRequest
 	}
 
 	s2 := bytes.IndexByte(line[s1+1:], ' ')
 	if s2 == -1 {
-		return nil, 0, ErrMalformedRequest
+		return 0, ErrMalformedRequest
 	}
 
 	s2 += s1 + 1
@@ -198,22 +198,21 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	targetRaw := line[s1+1 : s2]
 	version := line[s2+1:]
 	if len(method) == 0 || len(targetRaw) == 0 || len(version) == 0 {
-		return nil, 0, ErrMalformedRequest
+		return 0, ErrMalformedRequest
 	}
 	if !bytes.Equal(version, versionHTTP11) {
-		return nil, 0, ErrMalformedRequest
+		return 0, ErrMalformedRequest
 	}
 
-	parsedTarget, err := parseRequestTarget(targetRaw)
+	err := parseRequestTarget(targetRaw, &dst.Target)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 
-	return &RequestLine{
-		Method:  method,
-		Target:  parsedTarget,
-		Version: version,
-	}, consumed, nil
+	dst.Method = method
+	dst.Version = version
+
+	return consumed, nil
 
 }
 
@@ -229,20 +228,18 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 		switch r.state {
 
 		case stateInit:
-			line, bytesParsed, err := parseRequestLine(data[consumed:])
+			bytesParsed, err := parseRequestLine(data[consumed:], &r.Line)
 			if err != nil {
 				r.transitionTo(stateError)
 				return consumed + bytesParsed, err
 			}
-			if line == nil {
+			if bytesParsed == 0 {
 				return consumed, nil
 			}
-			if err := validateMethod(line.Method); err != nil {
+			if err := validateMethod(r.Line.Method); err != nil {
 				r.transitionTo(stateError)
 				return consumed + bytesParsed, err
 			}
-
-			r.Line = line
 			consumed += bytesParsed
 			r.transitionTo(stateHeaders)
 
@@ -345,50 +342,51 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 }
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := AcquireRequest()
-
 	bufPtr := AcquireBuffer()
+	req.rawBuffer = bufPtr
 	readBuf := *bufPtr
 	bufferedBytes := 0
+	parseIndex := 0
 
 	for !req.done() {
+
+		if bufferedBytes == len(readBuf) {
+			ReleaseBuffer(bufPtr)
+			req.rawBuffer = nil
+			ReleaseRequest(req)
+			return nil, errors.New("buffer overflow: request too large")
+		}
+
 		bytesRead, err := r.Read(readBuf[bufferedBytes:])
 
 		if err == io.EOF {
 			ReleaseBuffer(bufPtr)
+			req.rawBuffer = nil
 			ReleaseRequest(req)
 
 			return nil, ErrUnexpectedEOF
 		}
-		if err != nil && err != io.EOF {
+		if err != nil {
 			ReleaseBuffer(bufPtr)
+			req.rawBuffer = nil
 			ReleaseRequest(req)
 
 			return nil, err
 		}
 		bufferedBytes += bytesRead
 
-		consumed, err := req.parse(readBuf[:bufferedBytes])
+		consumed, err := req.parse(readBuf[parseIndex:bufferedBytes])
 
 		if err != nil {
 			ReleaseBuffer(bufPtr)
+			req.rawBuffer = nil
 			ReleaseRequest(req)
 			return nil, err
 		}
 
-		if consumed > 0 {
-			req.Headers.Own()
-			req.Line.Own()
-			if consumed == bufferedBytes {
-				bufferedBytes = 0
-			} else {
-				copy(readBuf, readBuf[consumed:bufferedBytes])
-				bufferedBytes -= consumed
-			}
-
-		}
+		parseIndex += consumed
 
 	}
-	ReleaseBuffer(bufPtr)
 	return req, nil
 }
 
@@ -416,20 +414,25 @@ func AcquireRequest() *Request {
 }
 
 func (r *Request) Reset() {
-	r.Line = nil
-	r.Host = ""
+	r.Line = RequestLine{}
+	r.Host = nil
 	r.transferEncoding = 0
 	r.Headers.Reset()
 	r.Body = r.Body[:0]
 	r.contentLength = 0
 	r.chunkSizeRemaining = 0
 	r.parsingChunkHeader = true
+	r.rawBuffer = nil
 	r.transitionTo(stateInit)
 }
 
 func ReleaseRequest(r *Request) {
 	if r == nil {
 		return
+	}
+	if r.rawBuffer != nil {
+		ReleaseBuffer(r.rawBuffer)
+		r.rawBuffer = nil
 	}
 	r.Reset()
 	requestPool.Put(r)
@@ -449,7 +452,7 @@ func (r *Request) validateHost() error {
 		return ErrMissingHost
 	}
 
-	r.Host = string(host)
+	r.Host = host
 	return nil
 
 }
@@ -535,33 +538,4 @@ func checkTransferEncoding(value []byte) error {
 	}
 	return nil
 
-}
-
-// own copies the request line data into a single owned buffer,
-//
-// replacing the slice headers to point into it.
-// Call this before any operation that may overwrite the source buffer.
-func (rl *RequestLine) Own() {
-	if rl == nil {
-		return
-	}
-
-	// One allocation covers method + " " + target + " " + version
-	// Reslice from that single backing array.
-	size := len(rl.Method) + len(rl.Target.Path) + len(rl.Target.RawQuery) + len(rl.Version)
-	buf := make([]byte, size)
-
-	n := copy(buf, rl.Method)
-	rl.Method = buf[:n]
-
-	m := copy(buf[n:], rl.Target.Path)
-	rl.Target.Path = buf[n : n+m]
-	n += m
-
-	q := copy(buf[n:], rl.Target.RawQuery)
-	rl.Target.RawQuery = buf[n : n+q]
-	n += q
-
-	copy(buf[n:], rl.Version)
-	rl.Version = buf[n : n+len(rl.Version)]
 }

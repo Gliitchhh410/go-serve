@@ -58,9 +58,3 @@ func (h *Headers) Reset() {
 	h.entries = h.entries[:0] // retain backing array for reuse
 }
 
-func (h *Headers) Own() {
-	for i := range h.entries {
-		h.entries[i].Name = bytes.Clone(h.entries[i].Name)
-		h.entries[i].Value = bytes.Clone(h.entries[i].Value)
-	}
-}

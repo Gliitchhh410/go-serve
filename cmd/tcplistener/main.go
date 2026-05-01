@@ -61,7 +61,7 @@ func main() {
 			continue
 		}
 
-		if req != nil && req.Line != nil {
+		if req != nil {
 			log.Printf("Method: %s\n", req.Line.Method)
 			log.Printf("Target: %s\n", req.Line.Target)
 			log.Printf("Version: %s\n", req.Line.Version)
