@@ -257,15 +257,21 @@ func TestRequest_StateTransitions(t *testing.T) {
 }
 
 func BenchmarkRequestFromReader(b *testing.B) {
-	raw := []byte("GET / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: bench\r\n\r\n")
+	payload := []byte("GET /foo/bar?baz=qux HTTP/1.1\r\nHost: localhost\r\nAccept: text/plain\r\n\r\n")
 
+	r := bytes.NewReader(payload)
+
+	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := RequestFromReader(bytes.NewReader(raw))
+		r.Reset(payload) // reuse reader, no allocation
+
+		req, err := RequestFromReader(r)
 		if err != nil {
 			b.Fatal(err)
 		}
+		ReleaseRequest(req)
 	}
 }
 
@@ -282,18 +288,19 @@ func BenchmarkRequestFromReader_BodyScaling(b *testing.B) {
 	for _, s := range sizes {
 		b.Run(s.name, func(b *testing.B) {
 			body := bytes.Repeat([]byte("a"), s.size)
-			raw := append(
-				[]byte("POST / HTTP/1.1\r\nContent-Length: "),
-				[]byte(fmt.Sprintf("%d\r\n\r\n", len(body)))...,
-			)
+			raw := []byte(fmt.Sprintf("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: %d\r\n\r\n", len(body)))
 			raw = append(raw, body...)
+			r := bytes.NewReader(raw)
+			b.ReportAllocs()
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				_, err := RequestFromReader(bytes.NewReader(raw))
+				r.Reset(raw)
+				req, err := RequestFromReader(r)
 				if err != nil {
 					b.Fatal(err)
 				}
+				ReleaseRequest(req)
 			}
 		})
 	}
@@ -312,27 +319,23 @@ func BenchmarkRequestFromReader_ManyHeaders(b *testing.B) {
 	for _, s := range sizes {
 		b.Run(s.name, func(b *testing.B) {
 			var buf bytes.Buffer
-
-			// request line
-			buf.WriteString("GET / HTTP/1.1\r\n")
-
-			// generate headers
+			buf.WriteString("GET / HTTP/1.1\r\nHost: localhost\r\n")
 			for i := 0; i < s.count; i++ {
 				fmt.Fprintf(&buf, "X-Test-%d: value-%d\r\n", i, i)
 			}
-
-			// end headers
 			buf.WriteString("\r\n")
-
 			raw := buf.Bytes()
-
+			r := bytes.NewReader(raw)
+			b.ReportAllocs()
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				_, err := RequestFromReader(bytes.NewReader(raw))
+				r.Reset(raw)
+				req, err := RequestFromReader(r)
 				if err != nil {
 					b.Fatal(err)
 				}
+				ReleaseRequest(req)
 			}
 		})
 	}

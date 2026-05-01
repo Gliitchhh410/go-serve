@@ -9,6 +9,7 @@ import (
 	"errors"
 	"httpServer/internal/headers"
 	"io"
+
 	// "path"
 	"strconv"
 	"sync"
@@ -108,6 +109,24 @@ var requestPool = sync.Pool{
 	New: func() any {
 		return NewRequest()
 	},
+}
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 4096)
+		return &b
+	},
+}
+
+func AcquireBuffer() *[]byte {
+	return bufferPool.Get().(*[]byte)
+}
+
+func ReleaseBuffer(b *[]byte) {
+	if b == nil {
+		return
+	}
+	bufferPool.Put(b)
 }
 
 func NewRequest() *Request {
@@ -327,18 +346,21 @@ func (r *Request) parse(data []byte) (consumed int, err error) {
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := AcquireRequest()
 
-	readBuf := make([]byte, 4096)
+	bufPtr := AcquireBuffer()
+	readBuf := *bufPtr
 	bufferedBytes := 0
 
 	for !req.done() {
 		bytesRead, err := r.Read(readBuf[bufferedBytes:])
 
 		if err == io.EOF {
+			ReleaseBuffer(bufPtr)
 			ReleaseRequest(req)
 
 			return nil, ErrUnexpectedEOF
 		}
 		if err != nil && err != io.EOF {
+			ReleaseBuffer(bufPtr)
 			ReleaseRequest(req)
 
 			return nil, err
@@ -348,6 +370,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		consumed, err := req.parse(readBuf[:bufferedBytes])
 
 		if err != nil {
+			ReleaseBuffer(bufPtr)
 			ReleaseRequest(req)
 			return nil, err
 		}
@@ -365,6 +388,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		}
 
 	}
+	ReleaseBuffer(bufPtr)
 	return req, nil
 }
 
