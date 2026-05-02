@@ -3,13 +3,15 @@ package headers
 import (
 	"bytes"
 	"errors"
-	
 )
 
-var ErrMalformedHeader = errors.New("malformed header")
+var (
+	ErrMalformedHeader     = errors.New("malformed header")
+	ErrObsoleteLineFolding = errors.New("obsolete line folding not supported")
+)
 var (
 	crlfBytes = []byte("\r\n")
-	colonByte = byte(':') 
+	colonByte = byte(':')
 )
 
 func isValidToken(b byte) bool {
@@ -34,7 +36,7 @@ func isValidToken(b byte) bool {
 	return isValid
 }
 
-func parseHeader(line []byte) (name , value []byte, err error) {
+func parseHeader(line []byte) (name, value []byte, err error) {
 	// parts := bytes.SplitN(line, []byte(":"), 2)
 	s1 := bytes.IndexByte(line, colonByte)
 	if s1 == -1 {
@@ -42,8 +44,6 @@ func parseHeader(line []byte) (name , value []byte, err error) {
 	}
 	name = line[:s1]
 	value = bytes.TrimSpace(line[s1+1:])
-
-
 
 	if len(name) < 1 || name[len(name)-1] == ' ' {
 		return nil, nil, ErrMalformedHeader
@@ -58,7 +58,7 @@ func parseHeader(line []byte) (name , value []byte, err error) {
 
 }
 
-func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
+func (h *Headers) Parse(data []byte) (consumed int, done bool, err error) {
 	for {
 		index := bytes.Index(data[consumed:], crlfBytes)
 
@@ -68,15 +68,18 @@ func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 
 		segmentLength := index + len(crlfBytes)
 
-		line := data[consumed: consumed+index]
-		
-		
+		line := data[consumed : consumed+index]
+
 		if len(line) == 0 {
 			consumed += segmentLength
 			return consumed, true, nil
 		}
+
+		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+			return consumed, false, ErrObsoleteLineFolding
+		}
 		name, value, err := parseHeader(line)
-		
+
 		if err != nil {
 			return consumed, false, err
 		}
@@ -88,4 +91,3 @@ func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 
 	}
 }
-

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"httpServer/internal/headers"
 )
 
 type chunkReader struct {
@@ -659,5 +660,33 @@ func FuzzRequestFromReader(f *testing.F) {
 			ReleaseRequest(req)
 		}
 
+	})
+}
+
+func TestRequestFromReader_MaliciousPayloads(t *testing.T) {
+	t.Run("Too Many Headers", func(t *testing.T) {
+		var buf bytes.Buffer
+		buf.WriteString("GET / HTTP/1.1\r\nHost: localhost\r\n")
+		for i := 0; i < 105; i++ {
+			buf.WriteString(fmt.Sprintf("X-Test-%d: %d\r\n", i, i))
+		}
+		buf.WriteString("\r\n")
+
+		req, err := RequestFromReader(bytes.NewReader(buf.Bytes()))
+		assert.ErrorIs(t, err, headers.ErrTooManyHeaders)
+		assert.Nil(t, req)
+	})
+
+	t.Run("Header Block Buffer Overflow", func(t *testing.T) {
+		var buf bytes.Buffer
+		buf.WriteString("GET / HTTP/1.1\r\nHost: localhost\r\nX-Large: ")
+		// Exceed 128*4096 (512KB)
+		buf.Write(make([]byte, 128*4096+100))
+		buf.WriteString("\r\n\r\n")
+
+		req, err := RequestFromReader(bytes.NewReader(buf.Bytes()))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "buffer overflow")
+		assert.Nil(t, req)
 	})
 }

@@ -10,9 +10,12 @@ import (
 )
 
 const MaxHeaders = 100
-var ErrTooManyHeaders = errors.New("too many headers")
+const MaxHeaderValueLength = 4096
 
-
+var( 
+	ErrHeaderValueTooLarge = errors.New("header value too large")
+	ErrTooManyHeaders = errors.New("too many headers")
+)
 type Header struct {
 	Name  []byte
 	Value []byte
@@ -36,6 +39,9 @@ func (h *Headers) Set(name []byte, value []byte) error {
 	for i := range h.entries {
 		if bytes.EqualFold(h.entries[i].Name, name) {
 			//Append ", " + value
+			if len(h.entries[i].Value)+2+len(value) > MaxHeaderValueLength {
+				return ErrHeaderValueTooLarge
+			}
 			combined := make([]byte, len(h.entries[i].Value)+2+len(value))
 			n := copy(combined, h.entries[i].Value)
 			n += copy(combined[n:], ", ")
@@ -44,7 +50,7 @@ func (h *Headers) Set(name []byte, value []byte) error {
 			return nil
 		}
 	}
-	
+
 	h.entries = append(h.entries, Header{Name: name, Value: value})
 	return nil
 }
@@ -64,8 +70,6 @@ func (h *Headers) ForEach(fn func(name, value []byte)) {
 	}
 }
 
-
 func (h *Headers) Reset() {
 	h.entries = h.entries[:0] // retain backing array for reuse
 }
-
