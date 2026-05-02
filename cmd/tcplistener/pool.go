@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
-	"httpServer/internal/request"
-	"httpServer/internal/response"
+	"chill-http/internal/request"
+	"chill-http/internal/response"
 	// "log"
 	"net"
 	"sync"

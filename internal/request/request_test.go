@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"httpServer/internal/headers"
+	"chill-http/internal/headers"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

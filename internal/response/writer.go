@@ -2,7 +2,7 @@ package response
 
 
 import (
-	"httpServer/internal/headers"
+	"chill-http/internal/headers"
 	"net"
 	"fmt"
 	"strconv"

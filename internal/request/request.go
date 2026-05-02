@@ -7,7 +7,7 @@ package request
 import (
 	"bytes"
 	"errors"
-	"httpServer/internal/headers"
+	"chill-http/internal/headers"
 	"io"
 
 	// "path"
