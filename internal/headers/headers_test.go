@@ -63,7 +63,7 @@ func TestHeaders_HeaderValueTooLarge(t *testing.T) {
 	value := make([]byte, 1000)
 	// 1000 * 4 + 2 * 3 = 4006 (OK)
 	// 4006 + 2 + 1000 = 5008 (Too large)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		err := h.Set(key, value)
 		assert.NoError(t, err)
 	}

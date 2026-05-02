@@ -1,3 +1,15 @@
 Final_HTTP_Server_Updated.txt
 .github/
 Codebase_Functions_Boundaries.txt
+
+
+# Binaries and executables
+*.exe
+*.test
+request.test
+server
+
+# Profiling data
+*.out
+mem
+cpu
