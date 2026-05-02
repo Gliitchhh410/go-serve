@@ -2,6 +2,8 @@ Final_HTTP_Server_Updated.txt
 .github/
 Codebase_Functions_Boundaries.txt
 
+cmd/fasthttp
+cmd/bombardier
 
 # Binaries and executables
 *.exe
