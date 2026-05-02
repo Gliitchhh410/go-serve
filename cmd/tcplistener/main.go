@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -13,19 +16,30 @@ func main() {
 	defer listener.Close()
 	log.Println("Listening on :42069")
 	pool := NewWorkerPool(4, 100)
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("Error accepting connection: %v\n", err)
-			continue
-		}
 
-		select {
-		case pool.conns <- conn:
-		default:
-			log.Printf("Server saturated, dropping connection from %s\n", conn.RemoteAddr())
-			conn.Write(response503)
-			conn.Close()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Printf("Accept loop stopping...")
+				break
+			}
+
+			select {
+			case pool.conns <- conn:
+			default:
+				log.Printf("Server saturated, dropping connection from %s\n", conn.RemoteAddr())
+				conn.Write(response503)
+				conn.Close()
+			}
 		}
-	}
+		close(pool.conns)
+	}()
+	<-quit
+	log.Println("Shutting down server gracefully.....")
+	listener.Close()
+	pool.wg.Wait()	// Wait for all workers to finish their active connections	
+	log.Println("Server gracefully shutted down")
 }
