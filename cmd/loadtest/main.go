@@ -22,7 +22,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 
-			conn, err := net.DialTimeout("tcp", "localhost:42069", 5*time.Second)
+			conn, err := net.DialTimeout("tcp", "localhost:42069", 1*time.Millisecond)
 			if err != nil {
 				atomic.AddInt32(&failed, 1)
 				return

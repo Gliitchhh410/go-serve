@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 )
 
@@ -15,7 +16,7 @@ func main() {
 	}
 	defer listener.Close()
 	log.Println("Listening on :42069")
-	pool := NewWorkerPool(4, 100)
+	pool := NewWorkerPool(runtime.NumCPU(), 1000) // optimal workers, 1000 queue
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -40,6 +41,6 @@ func main() {
 	<-quit
 	log.Println("Shutting down server gracefully.....")
 	listener.Close()
-	pool.wg.Wait()	// Wait for all workers to finish their active connections	
+	pool.wg.Wait() // Wait for all workers to finish their active connections
 	log.Println("Server gracefully shutted down")
 }
