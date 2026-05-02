@@ -6,7 +6,12 @@ package headers
 
 import (
 	"bytes"
+	"errors"
 )
+
+const MaxHeaders = 100
+var ErrTooManyHeaders = errors.New("too many headers")
+
 
 type Header struct {
 	Name  []byte
@@ -23,7 +28,11 @@ func New() *Headers {
 }
 
 // Set adds a Header. Keys are normalized to lowercase. Duplicate headers are concatenated with a comma.
-func (h *Headers) Set(name []byte, value []byte) {
+func (h *Headers) Set(name []byte, value []byte) error {
+
+	if len(h.entries) >= MaxHeaders {
+		return ErrTooManyHeaders
+	}
 	for i := range h.entries {
 		if bytes.EqualFold(h.entries[i].Name, name) {
 			//Append ", " + value
@@ -32,10 +41,12 @@ func (h *Headers) Set(name []byte, value []byte) {
 			n += copy(combined[n:], ", ")
 			copy(combined[n:], value)
 			h.entries[i].Value = combined
-			return
+			return nil
 		}
 	}
+	
 	h.entries = append(h.entries, Header{Name: name, Value: value})
+	return nil
 }
 
 func (h *Headers) Get(name []byte) ([]byte, bool) {

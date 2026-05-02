@@ -80,7 +80,10 @@ func (h *Headers) Parse(data []byte) (consumed int, done bool, err error){
 		if err != nil {
 			return consumed, false, err
 		}
-		h.Set(name, value)
+		err = h.Set(name, value)
+		if err != nil {
+			return consumed, false, err
+		}
 		consumed += segmentLength
 
 	}

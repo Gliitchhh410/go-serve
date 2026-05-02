@@ -342,7 +342,7 @@ func BenchmarkRequestFromReader_ManyHeaders(b *testing.B) {
 }
 
 func TestRequestFromReader_LargeHeaderCount(t *testing.T) {
-	const headerCount = 500
+	const headerCount = 99
 
 	var buf bytes.Buffer
 	buf.WriteString("GET / HTTP/1.1\r\n")
@@ -641,7 +641,6 @@ func TestRequestFromReader_UnsupportedTransferEncoding(t *testing.T) {
 	}
 }
 
-
 func FuzzRequestFromReader(f *testing.F) {
 	f.Add([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
 	f.Add([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello"))
@@ -652,13 +651,13 @@ func FuzzRequestFromReader(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		req, err := RequestFromReader(bytes.NewReader(data))
-		
+
 		if err != nil {
 			return
 		}
 		if req != nil {
 			ReleaseRequest(req)
 		}
-		
+
 	})
 }
