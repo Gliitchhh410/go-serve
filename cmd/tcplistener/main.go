@@ -11,6 +11,18 @@ import (
 
 const readTimeout = 5 * time.Second
 
+type idleTimeoutReader struct {
+	conn    net.Conn
+	timeout time.Duration
+}
+
+
+func (itr *idleTimeoutReader) Read(p []byte) (n int, err error){
+	if err := itr.conn.SetReadDeadline(time.Now().Add(itr.timeout)); err != nil {
+		return 0, err
+	}
+	return itr.conn.Read(p)
+}
 func main() {
 	listener, err := net.Listen("tcp", ":42069")
 	if err != nil {
@@ -35,12 +47,10 @@ func handleConn(conn net.Conn) {
 
 	log.Printf("Accepted connection from %s\n", conn.RemoteAddr())
 
-	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		log.Printf("Failed to set read deadline: %v\n", err)
-		return
-	}
+	tr := &idleTimeoutReader{conn: conn, timeout: readTimeout}
 
-	req, err := request.RequestFromReader(conn)
+
+	req, err := request.RequestFromReader(tr)
 	if err != nil {
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
