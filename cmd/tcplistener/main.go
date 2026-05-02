@@ -15,7 +15,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer listener.Close()
-	log.Println("Listening on :42069")
+	// log.Println("Listening on :42069")
 	pool := NewWorkerPool(runtime.NumCPU(), 1000) // optimal workers, 1000 queue
 
 	quit := make(chan os.Signal, 1)
@@ -24,14 +24,14 @@ func main() {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
-				log.Printf("Accept loop stopping...")
+				// log.Printf("Accept loop stopping...")
 				break
 			}
 
 			select {
 			case pool.conns <- conn:
 			default:
-				log.Printf("Server saturated, dropping connection from %s\n", conn.RemoteAddr())
+				// log.Printf("Server saturated, dropping connection from %s\n", conn.RemoteAddr())
 				conn.Write(response503)
 				conn.Close()
 			}
@@ -39,8 +39,8 @@ func main() {
 		close(pool.conns)
 	}()
 	<-quit
-	log.Println("Shutting down server gracefully.....")
+	// log.Println("Shutting down server gracefully.....")
 	listener.Close()
 	pool.wg.Wait() // Wait for all workers to finish their active connections
-	log.Println("Server gracefully shutted down")
+	// log.Println("Server gracefully shutted down")
 }

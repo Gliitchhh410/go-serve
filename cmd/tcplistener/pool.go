@@ -4,7 +4,7 @@ import (
 	"errors"
 	"httpServer/internal/request"
 	"httpServer/internal/response"
-	"log"
+	// "log"
 	"net"
 	"sync"
 	"time"
@@ -55,7 +55,7 @@ func handleConn(conn net.Conn) {
 	defer conn.Close()
 	rw := response.NewResponseWriter(conn)
 
-	log.Printf("Accepted connection from %s\n", conn.RemoteAddr())
+	// log.Printf("Accepted connection from %s\n", conn.RemoteAddr())
 
 	tr := &idleTimeoutReader{conn: conn, timeout: readTimeout}
 
@@ -63,13 +63,13 @@ func handleConn(conn net.Conn) {
 	if err != nil {
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
-			log.Printf("Connection timed out (Slowloris?): %s\n", conn.RemoteAddr())
+			// log.Printf("Connection timed out (Slowloris?): %s\n", conn.RemoteAddr())
 			rw.SetStatus(408)
 			rw.Send()
 			return
 		}
 		if errors.Is(err, request.ErrUnexpectedEOF) {
-			log.Printf("Client disconnected: %s\n", conn.RemoteAddr())
+			// log.Printf("Client disconnected: %s\n", conn.RemoteAddr())
 			return
 		}
 		if errors.Is(err, request.ErrMethodNotAllowed) {
@@ -90,13 +90,13 @@ func handleConn(conn net.Conn) {
 
 	defer request.ReleaseRequest(req)
 
-	log.Printf("Method: %s\n", req.Line.Method)
-	log.Printf("Target: %s\n", req.Line.Target.Path)
-	log.Printf("Version: %s\n", req.Line.Version)
-	req.Headers.ForEach(func(name, value []byte) {
-		log.Printf("Header: %s: %s\n", name, value)
-	})
-	log.Printf("Body: %s\n", req.Body)
+	// log.Printf("Method: %s\n", req.Line.Method)
+	// log.Printf("Target: %s\n", req.Line.Target.Path)
+	// log.Printf("Version: %s\n", req.Line.Version)
+	// req.Headers.ForEach(func(name, value []byte) {
+		// log.Printf("Header: %s: %s\n", name, value)
+	// })
+	// log.Printf("Body: %s\n", req.Body)
 
 	rw.SetStatus(200)
 	rw.SetBody([]byte("OK"))

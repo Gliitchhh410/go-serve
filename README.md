@@ -31,7 +31,7 @@ The parser operates on a single 64KB buffer sourced from a `sync.Pool`. Rather t
 shifting bytes or cloning slices, it advances an append-only `parseIndex` cursor
 through the buffer as tokens are extracted. All parsed fields (`Method`, `Path`,
 `Headers`, `Body`) are lightweight slice headers pointing directly into the pooled
-buffer — no heap allocation occurs during parsing under steady load.
+buffer — no heap allocation occurs during parsing under steady load. chill-http focuses strictly on the parsing hot path. The zero-allocation constraint applies to request parsing only. The response path and connection lifecycle are unoptimized. For a full keep-alive comparison, see the benchmarks directory.
 
 ```
 TCP stream → idleTimeoutReader → RequestFromReader → *Request
@@ -44,10 +44,10 @@ TCP stream → idleTimeoutReader → RequestFromReader → *Request
 
 Two `sync.Pool` instances manage all allocations:
 
-| Pool | Type | Lifecycle |
-|---|---|---|
-| `requestPool` | `*Request` | Acquired at connection start, released after response |
-| `bufferPool` | `*[]byte` (64KB) | Acquired inside `RequestFromReader`, owned by `*Request`, released by `ReleaseRequest` |
+| Pool          | Type             | Lifecycle                                                                              |
+| ------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| `requestPool` | `*Request`       | Acquired at connection start, released after response                                  |
+| `bufferPool`  | `*[]byte` (64KB) | Acquired inside `RequestFromReader`, owned by `*Request`, released by `ReleaseRequest` |
 
 **Lifetime constraint:** All fields on `*Request` are slice windows into the pooled
 buffer. They are only valid until `ReleaseRequest` is called. Any field that must
@@ -100,13 +100,13 @@ No active connection is dropped mid-request during a controlled shutdown.
 
 ## Security Posture
 
-| Threat | Mitigation |
-|---|---|
-| **Slowloris** | `idleTimeoutReader` calls `SetReadDeadline` before every `Read`. A client that stops sending for 5 seconds is dropped with 408. |
-| **Heap exhaustion via header flooding** | Parser operates on a fixed 64KB buffer. Requests exceeding this limit return `ErrRequestTooLarge` immediately, no unbounded allocation possible. |
-| **Buffer overflow** | Append-only cursor model. `parseIndex` only advances forward, never writes past `bufferedBytes`. No dynamic resizing. |
-| **Request smuggling** | Header names are validated against the RFC 7230 token alphabet. Obsolete line folding is rejected as malformed rather than silently concatenated. |
-| **Goroutine exhaustion** | Fixed worker pool bounds maximum concurrent goroutines regardless of connection rate. |
+| Threat                                  | Mitigation                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Slowloris**                           | `idleTimeoutReader` calls `SetReadDeadline` before every `Read`. A client that stops sending for 5 seconds is dropped with 408.                   |
+| **Heap exhaustion via header flooding** | Parser operates on a fixed 64KB buffer. Requests exceeding this limit return `ErrRequestTooLarge` immediately, no unbounded allocation possible.  |
+| **Buffer overflow**                     | Append-only cursor model. `parseIndex` only advances forward, never writes past `bufferedBytes`. No dynamic resizing.                             |
+| **Request smuggling**                   | Header names are validated against the RFC 7230 token alphabet. Obsolete line folding is rejected as malformed rather than silently concatenated. |
+| **Goroutine exhaustion**                | Fixed worker pool bounds maximum concurrent goroutines regardless of connection rate.                                                             |
 
 ---
 

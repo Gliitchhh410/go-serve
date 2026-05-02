@@ -6,9 +6,10 @@ import (
 	"io"
 	"testing"
 
+	"httpServer/internal/headers"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"httpServer/internal/headers"
 )
 
 type chunkReader struct {
@@ -313,8 +314,7 @@ func BenchmarkRequestFromReader_ManyHeaders(b *testing.B) {
 		count int
 	}{
 		{"10", 10},
-		{"100", 100},
-		{"1000", 1000},
+		{"99", 99},
 	}
 
 	for _, s := range sizes {

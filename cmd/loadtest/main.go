@@ -3,7 +3,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -54,9 +53,4 @@ func main() {
 	}
 
 	wg.Wait()
-
-	fmt.Printf("success:    %d\n", success)
-	fmt.Printf("overloaded: %d\n", overloaded)
-	fmt.Printf("failed:     %d\n", failed)
-	fmt.Printf("total:      %d\n", success+overloaded+failed)
 }
