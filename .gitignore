@@ -9,7 +9,4 @@ Codebase_Functions_Boundaries.txt
 request.test
 server
 
-# Profiling data
-*.out
-mem
-cpu
+
